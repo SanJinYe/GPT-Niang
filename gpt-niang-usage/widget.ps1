@@ -22,6 +22,7 @@ $null=New-Item -ItemType Directory -Path $script:dataDir -Force
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\color-theme.ps1'),[Text.Encoding]::UTF8)))
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\music.ps1'),[Text.Encoding]::UTF8)))
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\quote-layout.ps1'),[Text.Encoding]::UTF8)))
+. ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime/dual-quota.ps1'),[Text.Encoding]::UTF8)))
 Initialize-WidgetQuoteLayouts $script:appDir
 Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase,System.Windows.Forms,System.Drawing
 Add-Type -TypeDefinition @'
@@ -111,7 +112,7 @@ $script:window=[Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Joi
 $script:designWidth=[double]$script:window.FindName('AnimationStage').Width
 $script:designHeight=[double]$script:window.FindName('AnimationStage').Height
 $script:ui=@{}
-foreach($name in @('Root','Bubble','Tail','TailNear','SceneText','QuotaText','QuoteText','BubbleShape','Girl','PressScale','FacingScale','TextFacingScale','Header','Refresh','MenuButton','Status','LiveDot','ShortRow','WeekRow','ShortLabel','WeekLabel','ShortUsed','ShortLeft','ShortReset','ShortBar','WeekUsed','WeekLeft','WeekReset','WeekBar')){$script:ui[$name]=$script:window.FindName($name)}
+foreach($name in @('Root','Bubble','Tail','TailNear','SceneText','QuotaText','QuoteText','BubbleShape','Girl','PressScale','FacingScale','TextFacingScale','Header','Refresh','MenuButton','Status','LiveDot','ShortRow','WeekRow','ShortLabel','WeekLabel','ShortUsed','ShortLeft','ShortReset','ShortBar','WeekUsed','WeekLeft','WeekReset','WeekBar','CodexTitle','ArkTitle','CodexPanel','ArkPanel','ArkShortRow','ArkWeekRow','ArkShortLabel','ArkWeekLabel','ArkShortUsed','ArkShortLeft','ArkShortReset','ArkShortBar','ArkWeekUsed','ArkWeekLeft','ArkWeekReset','ArkWeekBar')){$script:ui[$name]=$script:window.FindName($name)}
 $script:characterId='gpt-dragon';$script:activeCharacter=$null
 $script:status=$null
 $script:statusStamp=0
@@ -119,7 +120,7 @@ $script:offsetRight=0.0;$script:offsetBottom=0.0;$script:offsetLeft=$null;$scrip
 $script:soundOn=$true;$script:soundVolume=0.9;$script:bubbleTapAdvance=$false;$script:hideMenu=$false
 $script:followHost=$true;$script:desktopTopmost=$false;$script:desktopLeft=$null;$script:desktopTop=$null
 $script:hostReadiness=New-WidgetReadinessState
-$script:bubbleMode='quota';$script:sceneStartedAt=0;$script:sceneDeadline=0;$script:sceneTimer=$null;$script:sceneRevision=0
+$script:quotaProvider='Codex';$script:bubbleMode='quota';$script:sceneStartedAt=0;$script:sceneDeadline=0;$script:sceneTimer=$null;$script:sceneRevision=0
 $script:resetTimeMode='countdown';$script:resetPhaseTimer=$null
 $script:displayRequestToken=$null
 $settingsFile=Join-Path $script:dataDir 'settings.json'
@@ -437,6 +438,9 @@ function Apply-Scene {
   Set-WidgetSceneLayout
   if($script:widgetColors){Update-WidgetColorScene}
   $quota=$script:bubbleMode-eq 'quota'
+  $script:ui.CodexPanel.Visibility=if($script:quotaProvider-eq 'Codex'){'Visible'}else{'Collapsed'}
+  $script:ui.ArkPanel.Visibility=if($script:quotaProvider-eq 'Ark'){'Visible'}else{'Collapsed'}
+  $script:ui.Header.Text=$script:quotaProvider+' 剩余额度'
   $script:ui.QuotaText.Visibility=if($quota){[Windows.Visibility]::Visible}else{[Windows.Visibility]::Collapsed}
   $script:ui.QuoteText.Visibility=if($quota){[Windows.Visibility]::Collapsed}else{[Windows.Visibility]::Visible}
   $script:ui.Refresh.Visibility=$script:ui.QuotaText.Visibility;$script:ui.LiveDot.Visibility=[Windows.Visibility]::Collapsed
@@ -445,12 +449,13 @@ function Apply-Scene {
 function Update-BubbleTooltip {
   $copy=if($script:bubbleMode-in @('quote','completion')){$script:ui.QuoteText.Tag}else{
     $parts=@()
-    if($script:status.planLabel){$parts+='当前套餐：'+$script:status.planLabel}
-    foreach($row in (Get-QuotaRows)){
+    if($script:quotaProvider-eq 'Codex' -and $script:status.planLabel){$parts+='当前套餐：'+$script:status.planLabel}
+    foreach($row in (Get-AllQuotaRows)){
+      if($row.provider-ne $script:quotaProvider){continue}
       if($script:ui[$row.prefix+'Row'].Visibility-ne [Windows.Visibility]::Collapsed){
         $reset=$script:ui[$row.prefix+'Reset']
         $detail=if($reset.ToolTip){[string]$reset.ToolTip}else{$reset.Text}
-        $parts+="$($row.label)：$($script:ui[$row.prefix+'Used'].Text)，$detail"
+        $parts+="$($row.provider) $($row.label)：$($script:ui[$row.prefix+'Used'].Text)，$detail"
         if($row.window.kind-eq 'individual'){
           $q=$row.window;$parts+='公司工作区内的个人限额（非公司总余额）'
           if($null-ne $q.total -and $null-ne $q.amountUsed){
@@ -462,12 +467,12 @@ function Update-BubbleTooltip {
     # If an individual cap coexists with both timed windows, the second row
     # shows the shortest timed window consistently; retain all others in the tooltip.
     $shown=@((Get-QuotaRows)|ForEach-Object{$_.window})
-    foreach($q in @($script:status.windows|Where-Object{$null-ne $_ -and $_ -notin $shown})){
+    foreach($q in @($script:status.windows|Where-Object{$script:quotaProvider-eq 'Codex' -and $null-ne $_ -and $_ -notin $shown})){
       $label=Get-QuotaWindowLabel $q ''
       $detail=if($q.resetsAt){Format-ResetTime ([long]$q.resetsAt) ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())}else{'未提供重置时间'}
       $parts+=$label+'：已用 '+([double]$q.used).ToString('0.#')+'%，'+$detail
     }
-    ($parts+@($script:ui.Status.Text))-join "`n"
+    ($parts+@($(if($script:quotaProvider-eq 'Codex'){$script:ui.Status.Text}else{$script:ui.ArkTitle.ToolTip})))-join "`n"
   }
   if(!$script:bubbleTooltipText){
     $script:bubbleTooltipText=New-Object Windows.Controls.TextBlock
@@ -504,13 +509,14 @@ function Switch-Scene([string]$mode){
 }
 function Next-Bubble {
   if($script:collapsed){return}
-  if($script:bubbleMode-eq 'quota'){Switch-Scene 'quote'}else{Hide-Quota}
+  if($script:bubbleMode-eq 'quota'){
+    if($script:quotaProvider-eq 'Codex'){$script:quotaProvider='Ark';Apply-Scene;Restart-SceneTtl}
+    else{Switch-Scene 'quote'}
+  }else{Hide-Quota}
 }
 function Click-Character {
   if($script:collapsed){Show-Quota}
-  elseif($script:bubbleTapAdvance){Next-Bubble}
-  elseif($script:bubbleMode-ne 'quota'){Switch-Scene 'quota'}
-  else{Restart-SceneTtl}
+  else{Next-Bubble}
 }
 function Test-WidgetCompletionForeground {
   if(!$script:followHost){return $true}
@@ -526,8 +532,10 @@ function Tick-WidgetAutoQuote([long]$Now,[bool]$Visible) {
   if(Test-WidgetAutoQuoteDue $Now $Visible ([bool]$busy)){Show-Quote;$script:autoQuoteDisplayCount++}
 }
 function Show-Quota {
+  $script:quotaProvider='Codex'
   $wasCollapsed=$script:collapsed
   Open-WidgetBubble 'quota'
+  Apply-Scene
   if($wasCollapsed){Request-Refresh}
 }
 function Show-Quote {Open-WidgetBubble 'quote'}
@@ -586,7 +594,7 @@ function Animate-Press([bool]$down) {
   Animate-Value $script:ui.PressScale ([Windows.Media.ScaleTransform]::ScaleXProperty) $x 220 0 $true
   Animate-Value $script:ui.PressScale ([Windows.Media.ScaleTransform]::ScaleYProperty) $y 220 0 $true
 }
-function Request-Refresh {[IO.File]::WriteAllText((Join-Path $script:dataDir 'refresh.flag'),([DateTime]::UtcNow.ToString('o')+' '+[Guid]::NewGuid().ToString('N')))}
+function Request-Refresh {$script:arkNextRead=0L;[IO.File]::WriteAllText((Join-Path $script:dataDir 'refresh.flag'),([DateTime]::UtcNow.ToString('o')+' '+[Guid]::NewGuid().ToString('N')))}
 function Exit-WidgetForSession {
   if($script:followHost){Set-WidgetSupervisorPause -AppDir $script:appDir -HostHandle $script:hostHandle.ToInt64() -HostPid ([GptWidgetNative]::ProcessId($script:hostHandle))}
   else{Write-WidgetSupervisorJson (Join-Path $script:dataDir 'supervisor-pause.json') @{desktop=$true;at=[DateTime]::UtcNow.ToString('o')}}
@@ -658,26 +666,27 @@ function Get-QuotaRows {
 function Set-ResetTimeMode([string]$mode,[long]$nowMilliseconds){
   $script:resetTimeMode=$mode
   $now=[long][Math]::Floor($nowMilliseconds/1000)
-  foreach($row in (Get-QuotaRows)){
+  foreach($row in (Get-AllQuotaRows)){
     $q=$row.window
     if($q -and $null-ne $q.resetsAt -and [double]$q.resetsAt-gt 0){$script:ui[$row.prefix+'Reset'].Text=Format-ResetDisplay ([long]$q.resetsAt) $now}
   }
 }
 function Update-Quota {
+  Update-ArkQuotaRead
   $file=Join-Path $script:dataDir 'status.json'
   try{$stamp=[IO.File]::GetLastWriteTimeUtc($file).Ticks
     if(!(Test-Path -LiteralPath $file)){$script:status=$null;$script:statusStamp=0}
     elseif($stamp-ne $script:statusStamp){$script:status=Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json;$script:statusStamp=$stamp}
   }catch{$script:status=$null;$script:statusStamp=0}
   $now=[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  foreach($row in (Get-QuotaRows)){
+  foreach($row in (Get-AllQuotaRows)){
     $prefix=$row.prefix;$q=$row.window
     $script:ui[$prefix+'Label'].Text=$row.label
-    $script:ui[$prefix+'Row'].Visibility=if(!$q -and $script:status.queryOk-eq $true){[Windows.Visibility]::Collapsed}else{[Windows.Visibility]::Visible}
+    $script:ui[$prefix+'Row'].Visibility=if($row.hidden -or (!$q -and $row.queryOk-eq $true)){[Windows.Visibility]::Collapsed}else{[Windows.Visibility]::Visible}
     $script:ui[$prefix+'Reset'].ToolTip=$null
     if(!$q){
       $script:ui[$prefix+'Used'].Text='已用 —';$script:ui[$prefix+'Left'].Text='—'
-      $script:ui[$prefix+'Reset'].Text=if($script:status -and $script:status.queryOk-ne $true){'额度读取异常'}else{'暂无额度数据'}
+      $script:ui[$prefix+'Reset'].Text=$row.error
       $script:ui[$prefix+'Bar'].Width=0;$script:ui[$prefix+'Left'].Foreground=[Windows.Media.BrushConverter]::new().ConvertFromString('#95889F');continue
     }
     $hasReset=$null-ne $q.resetsAt -and [double]$q.resetsAt-gt 0
@@ -687,7 +696,7 @@ function Update-Quota {
     $script:ui[$prefix+'Left'].Text=if($expired){'—'}else{"$left%"}
     $script:ui[$prefix+'Reset'].Text=if($hasReset){Format-ResetDisplay ([long]$q.resetsAt) $now}else{'未提供重置时间'}
     if($hasReset){$script:ui[$prefix+'Reset'].ToolTip='本机时间 '+[DateTimeOffset]::FromUnixTimeSeconds([long]$q.resetsAt).ToLocalTime().ToString('yyyy-MM-dd HH:mm zzz')+' 重置 · '+(Reset-Label ([double]$q.resetsAt-$now))}
-    $script:ui[$prefix+'Bar'].Width=if($expired){0}else{184*[double]$q.remaining/100}
+    $script:ui[$prefix+'Bar'].Width=if($expired){0}else{$row.barWidth*[double]$q.remaining/100}
     $color=if($expired){'#B3A7C0'}elseif([double]$q.used-ge 90){'#D77659'}elseif([double]$q.used-ge 75){'#D0A051'}else{'#9B86C1'}
     $script:ui[$prefix+'Bar'].Background=[Windows.Media.BrushConverter]::new().ConvertFromString($color)
     $valueColor=if($expired){'#95889F'}elseif([double]$q.used-ge 90){'#B74839'}elseif([double]$q.used-ge 75){'#A06C1C'}else{'#745A98'}
@@ -708,8 +717,10 @@ function Update-Quota {
   $script:ui.Status.ToolTip=$script:ui.Status.Text
   $headerState=if(!$script:status){'正在读取'}elseif(!$script:status.ok){'暂无法读取'}elseif($script:status.error -or $age-gt 180){'上次剩余额度'}else{'剩余额度'}
   $planTitle=([string]$script:status.planLabel).Trim()
-  $script:ui.Header.Text=$headerState
-  $script:ui.Header.ToolTip=if($script:status.planLabel){'当前套餐：'+$script:status.planLabel+' · 重置时间按本机时间显示'}else{'重置时间按本机时间显示'}
+  $script:ui.Header.Text=$script:quotaProvider+' 剩余额度'
+  $script:ui.CodexTitle.ToolTip=$headerState+' · '+$script:ui.Status.Text
+  $script:ui.ArkTitle.ToolTip=if($script:arkStatus.error){$script:arkStatus.error}else{'Ark Coding Plan · 剩余百分比'}
+  $script:ui.Header.ToolTip=if($script:quotaProvider-eq 'Ark'){$script:ui.ArkTitle.ToolTip}elseif($script:status.planLabel){'当前套餐：'+$script:status.planLabel+' · 重置时间按本机时间显示'}else{'重置时间按本机时间显示'}
   Update-BubbleTooltip
   if($script:widgetColors){Update-WidgetColorScene}
 }
@@ -911,6 +922,7 @@ function Ensure-QuotaWorker([long]$now){
 function Stop-WidgetRuntime {
   if($script:runtimeClosed){return};$script:runtimeClosed=$true
   try{if($script:occlusionRecovery){$script:occlusionRecovery.Dispose()}}catch{}
+  try{Stop-ArkQuotaRead}catch{}
   try{Stop-WidgetMusic}catch{}
   try{if($script:hostFollower){$script:hostFollower.Dispose()}}catch{}
   foreach($timer in @($script:settingsMenuDismissTimer,$script:timer,$script:hostEventTimer,$script:menuTimer,$script:sceneTimer,$script:resetPhaseTimer,$script:closeTimer)){try{if($timer){$timer.Stop()}}catch{}}
@@ -928,7 +940,7 @@ function Stop-WidgetRuntime {
   try{if($script:mutexOwned){$script:mutex.ReleaseMutex();$script:mutexOwned=$false}}catch{};try{$script:mutex.Dispose()}catch{}
 }
 function Write-WidgetPresence([bool]$visible,[long]$now){
-Write-WidgetJson (Join-Path $script:dataDir 'presence.json') @{visible=[bool]$visible;at=$now;host=$script:hostHandle.ToInt64();widget=$script:widgetHandle.ToInt64();pid=$PID;character=@{id=$script:characterId;name=$script:activeCharacter.name;galleryOpen=[bool]($script:characterGallery -and $script:characterGallery.IsVisible)};sound=(Get-WidgetAudioStatus);followHost=$script:followHost;follow=@{ready=$script:hostFollower.Ready;events=$script:hostFollower.MovementEvents;mode='native-immediate';animationPaddingDip=14};sizing=@{character=$script:scale;bubble=$script:bubbleScale;display=$script:displayScale;preview=[bool]$script:settingsSizePreview};autoQuotes=@{enabled=$script:autoQuoteEnabled;intervalSeconds=$script:autoQuoteIntervalSeconds;nextAt=$script:autoQuoteNextAt;displayCount=$script:autoQuoteDisplayCount};completion=(Get-CompletionNotificationStatus);recovery=@{checks=$script:occlusionRecovery.Checks;toggles=$script:occlusionRecovery.Toggles;pending=$script:occlusionRecovery.Pending;cloaked=$script:occlusionRecovery.OwnedCloak;failed=$script:occlusionRecovery.Failed;hresult=$script:occlusionRecovery.LastHresult};music=(Get-WidgetMusicStatus);scene=@{open=!$script:collapsed;mode=$script:bubbleMode;resetTimeMode=$script:resetTimeMode;startedAt=$script:sceneStartedAt;closesAt=$script:sceneDeadline;shortReset=$script:ui.ShortReset.Text;weekReset=$script:ui.WeekReset.Text}}
+Write-WidgetJson (Join-Path $script:dataDir 'presence.json') @{visible=[bool]$visible;at=$now;host=$script:hostHandle.ToInt64();widget=$script:widgetHandle.ToInt64();pid=$PID;character=@{id=$script:characterId;name=$script:activeCharacter.name;galleryOpen=[bool]($script:characterGallery -and $script:characterGallery.IsVisible)};sound=(Get-WidgetAudioStatus);followHost=$script:followHost;follow=@{ready=$script:hostFollower.Ready;events=$script:hostFollower.MovementEvents;mode='native-immediate';animationPaddingDip=14};sizing=@{character=$script:scale;bubble=$script:bubbleScale;display=$script:displayScale;preview=[bool]$script:settingsSizePreview};autoQuotes=@{enabled=$script:autoQuoteEnabled;intervalSeconds=$script:autoQuoteIntervalSeconds;nextAt=$script:autoQuoteNextAt;displayCount=$script:autoQuoteDisplayCount};completion=(Get-CompletionNotificationStatus);recovery=@{checks=$script:occlusionRecovery.Checks;toggles=$script:occlusionRecovery.Toggles;pending=$script:occlusionRecovery.Pending;cloaked=$script:occlusionRecovery.OwnedCloak;failed=$script:occlusionRecovery.Failed;hresult=$script:occlusionRecovery.LastHresult};music=(Get-WidgetMusicStatus);quota=@{codex5h=$script:ui.ShortLeft.Text;codexWeek=$script:ui.WeekLeft.Text;ark5h=$script:ui.ArkShortLeft.Text;arkWeek=$script:ui.ArkWeekLeft.Text;arkError=$script:arkStatus.error};scene=@{open=!$script:collapsed;mode=$script:bubbleMode;provider=$script:quotaProvider;resetTimeMode=$script:resetTimeMode;startedAt=$script:sceneStartedAt;closesAt=$script:sceneDeadline;shortReset=$script:ui.ShortReset.Text;weekReset=$script:ui.WeekReset.Text}}
 }
 function Tick-Widget {
   if($script:updating){return}

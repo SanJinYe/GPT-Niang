@@ -26,3 +26,10 @@ Thumbs.db
 **/gui.lock
 **/worker-ownership.lock
 **/worker.log
+
+# Local references, runtime connection settings and Python caches
+.local/
+**/*-connection.json
+**/music-now-playing.json
+**/__pycache__/
+**/*.pyc

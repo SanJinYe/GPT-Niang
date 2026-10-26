@@ -40,6 +40,8 @@
           <TextBlock x:Name="Header" Grid.Column="1" Text="剩余额度" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="136" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="12" LineHeight="16" LineStackingStrategy="BlockLineHeight" FontWeight="SemiBold" Foreground="#7D6B91" IsHitTestVisible="False" ToolTip="重置时间按当前机器的本地时间显示"/>
           <Button x:Name="Refresh" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Width="20" Height="16" Content="↻" FontSize="12" ToolTip="立即刷新额度"/>
         </Grid>
+<Grid>
+<StackPanel x:Name="CodexPanel">
         <StackPanel x:Name="ShortRow" Margin="0,1,0,0" IsHitTestVisible="False">
         <Grid Height="25">
           <TextBlock x:Name="ShortLabel" Text="5 小时" FontSize="13" VerticalAlignment="Center" Foreground="#76638D"/>
@@ -62,6 +64,33 @@
         <TextBlock x:Name="WeekReset" Text="等待额度数据" Margin="0,1,0,0" FontSize="12" LineHeight="15" LineStackingStrategy="BlockLineHeight" Foreground="#7D6B91"/>
         <TextBlock x:Name="WeekUsed" Visibility="Collapsed" Text="已用 —"/>
         </StackPanel>
+</StackPanel>
+<StackPanel x:Name="ArkPanel" Visibility="Collapsed">
+        <StackPanel x:Name="ArkShortRow" Margin="0,1,0,0" IsHitTestVisible="False">
+        <Grid Height="25">
+          <TextBlock x:Name="ArkShortLabel" Text="5 小时" FontSize="13" VerticalAlignment="Center" Foreground="#76638D"/>
+          <TextBlock x:Name="ArkShortLeft" Text="—" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe UI" FontSize="20" LineHeight="25" LineStackingStrategy="BlockLineHeight" FontWeight="Bold" Foreground="#745A98"/>
+        </Grid>
+        <Border Height="4" Background="#EAE4F3" CornerRadius="2" Margin="0,1,0,0">
+          <Border x:Name="ArkShortBar" Background="#AA95CD" CornerRadius="2" Width="0" HorizontalAlignment="Left"/>
+        </Border>
+        <TextBlock x:Name="ArkShortReset" Text="等待额度数据" Margin="0,1,0,0" FontSize="12" LineHeight="15" LineStackingStrategy="BlockLineHeight" Foreground="#7D6B91"/>
+        <TextBlock x:Name="ArkShortUsed" Visibility="Collapsed" Text="已用 —"/>
+        </StackPanel>
+        <StackPanel x:Name="ArkWeekRow" Margin="0,4,0,0" IsHitTestVisible="False">
+        <Grid Height="25">
+          <TextBlock x:Name="ArkWeekLabel" Text="每周" FontSize="13" VerticalAlignment="Center" Foreground="#76638D"/>
+          <TextBlock x:Name="ArkWeekLeft" Text="—" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe UI" FontSize="20" LineHeight="25" LineStackingStrategy="BlockLineHeight" FontWeight="Bold" Foreground="#745A98"/>
+        </Grid>
+        <Border Height="4" Background="#EAE4F3" CornerRadius="2" Margin="0,1,0,0">
+          <Border x:Name="ArkWeekBar" Background="#AA95CD" CornerRadius="2" Width="0" HorizontalAlignment="Left"/>
+        </Border>
+        <TextBlock x:Name="ArkWeekReset" Text="等待额度数据" Margin="0,1,0,0" FontSize="12" LineHeight="15" LineStackingStrategy="BlockLineHeight" Foreground="#7D6B91"/>
+        <TextBlock x:Name="ArkWeekUsed" Visibility="Collapsed" Text="已用 —"/>
+        </StackPanel>
+</StackPanel>
+</Grid>
+<TextBlock x:Name="CodexTitle" Visibility="Collapsed"/><TextBlock x:Name="ArkTitle" Visibility="Collapsed"/>
         <TextBlock x:Name="Status" Visibility="Collapsed" Text="正在读取额度…"/>
       </StackPanel>
         <TextBlock x:Name="QuoteText" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" FontSize="20" FontWeight="Bold" LineHeight="25" Foreground="#745A98" IsHitTestVisible="False" Text="我在这儿，慢慢来就好。"/>
@@ -75,7 +104,7 @@
       <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform>
     </Ellipse>
     <Image x:Name="Girl" Canvas.Left="142" Canvas.Top="142" Width="208" Height="208" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" Cursor="Hand"
-           ToolTip="点角色看额度；点气泡看语录，再点收起；拖动调整位置；右键设置"/>
+           ToolTip="连续点角色或气泡：Codex → Ark → 语句 → 收起；拖动调整位置；右键设置"/>
     <Button x:Name="MenuButton" Canvas.Left="320" Canvas.Top="162" Width="24" Height="24"
             FontSize="15" Opacity="0" IsHitTestVisible="False" Background="#EDE7F6" ToolTip="挂件设置">
       <Viewbox Width="14" Height="14" Stretch="Uniform">
