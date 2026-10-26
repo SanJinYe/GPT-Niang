@@ -160,6 +160,7 @@ public sealed class GptMusicVisual : IDisposable {
     static readonly Color RoomColor=Color.FromArgb(145,10,7,23);
     public bool Enabled {get;private set;}
     public bool ColorEnabled {get;set;}
+    public bool AllowLyricsBubble {get;set;}
     bool horizontalTravelEnabled=true;
     public bool HorizontalTravelEnabled {get{return horizontalTravelEnabled;}set{
         horizontalTravelEnabled=value;
@@ -266,7 +267,7 @@ public sealed class GptMusicVisual : IDisposable {
     bool InteractionBlocked() {
         bool held=Motion!=null&&Motion.Held;
         bool flying=Motion!=null&&!held&&Motion.Phase<2;
-        return blocked||(window.ContextMenu!=null&&window.ContextMenu.IsOpen)||(!held&&!flying&&(girl.IsMouseCaptured||(bubble!=null&&bubble.Visibility==Visibility.Visible)));
+        return blocked||(window.ContextMenu!=null&&window.ContextMenu.IsOpen)||(!held&&!flying&&(girl.IsMouseCaptured||(bubble!=null&&bubble.Visibility==Visibility.Visible&&!AllowLyricsBubble)));
     }
     void ApplyPosition() {
         if(disposed||!Enabled||Paused||Motion==null||!visible||!allowed||!window.IsVisible||InteractionBlocked())return;

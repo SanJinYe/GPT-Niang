@@ -8,6 +8,54 @@ function Set-WidgetMusicHorizontal([bool]$Enabled) {
   if(Test-WidgetMusicActive){$script:widgetMusic.HorizontalTravelEnabled=$Enabled}
   Save-Settings
 }
+$script:musicFollowNetease=$false
+$script:musicBridge=$null
+$script:musicNowPlaying=$null
+function Start-WidgetMusicBridge {
+  if($script:musicBridge -and !$script:musicBridge.HasExited){return}
+  $config=[IO.File]::ReadAllText((Join-Path $script:dataDir 'music-connection.json')) | ConvertFrom-Json
+  $start=[Diagnostics.ProcessStartInfo]::new()
+  $start.FileName=$config.nodePath
+  $start.Arguments='"'+$config.bridgePath+'" "'+(Join-Path $script:dataDir 'music-now-playing.json')+'"'
+  $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardInput=$true
+  $script:musicBridge=[Diagnostics.Process]::Start($start)
+}
+function Stop-WidgetMusicBridge {
+  if($script:musicBridge){
+    if(!$script:musicBridge.HasExited){$script:musicBridge.StandardInput.Close()}
+    $script:musicBridge.Dispose();$script:musicBridge=$null
+  }
+}
+function Set-WidgetMusicFollowNetease([bool]$Enabled) {
+  $script:musicFollowNetease=$Enabled
+  if(!$Enabled){Stop-WidgetMusic}
+  Save-Settings
+  if($Enabled){Update-WidgetNowPlaying}
+}
+function Set-WidgetManualMusic([bool]$Enabled) {
+  $script:musicFollowNetease=$false;Save-Settings
+  Set-WidgetMusicEnabled $Enabled
+}
+function Update-WidgetNowPlaying {
+  if(![IO.File]::Exists((Join-Path $script:dataDir 'music-connection.json'))){return}
+  try{
+    Start-WidgetMusicBridge
+    $file=Join-Path $script:dataDir 'music-now-playing.json'
+    if(![IO.File]::Exists($file)){return}
+    $state=[IO.File]::ReadAllText($file,[Text.Encoding]::UTF8) | ConvertFrom-Json
+    $fresh=([Math]::Abs([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()-[long]$state.at)-lt 10000)
+    $script:musicNowPlaying=$state
+    if($script:musicFollowNetease){
+    if($fresh -and $state.connected -and $state.playing-eq $true){
+      if($script:window.IsVisible -and !(Test-WidgetMusicActive)){Set-WidgetMusicEnabled $true}
+    }elseif(Test-WidgetMusicActive){Stop-WidgetMusic}
+    }
+    if($script:settingsMenuUi.MusicTrack){
+      $script:settingsMenuUi.MusicTrack.Header=if(!$fresh){'歌曲状态已过期'}elseif(!$state.connected){'网易云未连接'}else{$(if($state.playing){'正在播放：'}else{'已暂停：'})+$state.title+' · '+$state.artists}
+      $script:settingsMenuUi.MusicTrack.ToolTip=$state.error
+    }
+  }catch{$script:musicLastError=$_.Exception.Message;if($script:musicFollowNetease -and (Test-WidgetMusicActive)){Stop-WidgetMusic}}
+}
 function Set-WidgetMusicLights([bool]$Enabled) {
   $script:musicLightsEnabled=$Enabled
   if(Test-WidgetMusicActive){$script:widgetMusic.LightsEnabled=$Enabled}
@@ -49,7 +97,7 @@ function Set-WidgetMusicEnabled([bool]$Enabled) {
   if(Test-WidgetMusicActive){return}
   if(!$script:window.IsVisible){throw '请先显示挂件再开启音乐律动。'}
   try{
-    Hide-Quota
+    if($script:bubbleMode-notin @('quote','lyrics')){Hide-Quota}
     Initialize-WidgetMusicTypes
     $colors=[Windows.Media.Color[]]@(Get-WidgetColorPalette 'rainbow'|ForEach-Object{[Windows.Media.ColorConverter]::ConvertFromString($_)})
     $move=[Delegate]::CreateDelegate([Action[int,int]],$script:hostFollower,'SetTemporaryOffset')
@@ -58,6 +106,7 @@ function Set-WidgetMusicEnabled([bool]$Enabled) {
     $script:widgetMusic=[GptMusicVisual]::new($script:window,$script:ui.Girl,$script:ui.Bubble,$move,$colors,($script:characterId-eq 'gpt-dragon'))
     $script:widgetMusic.FollowLamp=[Delegate]::CreateDelegate([Action[IntPtr,int,int,int]],$script:hostFollower,'SetCompanion')
     $script:widgetMusic.HostFrame=[Delegate]::CreateDelegate([Func[int[]]],$script:hostFollower,'GetFrame')
+    $script:widgetMusic.AllowLyricsBubble=(!$script:collapsed -and $script:bubbleMode-eq 'lyrics')
     $script:widgetMusic.LightsEnabled=$script:musicLightsEnabled
     $script:widgetMusic.HorizontalTravelEnabled=$script:musicHorizontalEnabled
     Update-WidgetMusicPlacement (Get-WidgetPlacementFrame) (Get-WidgetPlacementDpi) $normal.Left $normal.Top $true
@@ -91,9 +140,9 @@ function Update-WidgetMusicVisibility([bool]$Visible,[bool]$Blocked=$false) {
   }
 }
 function Get-WidgetMusicStatus {
-  if(!(Test-WidgetMusicActive)){return @{enabled=$false;lights=$script:musicLightsEnabled;horizontal=$script:musicHorizontalEnabled;color=$script:musicColorEnabled;error=if($script:widgetMusic -and $script:widgetMusic.Error){$script:widgetMusic.Error}else{$script:musicLastError}}}
+  if(!(Test-WidgetMusicActive)){return @{enabled=$false;lights=$script:musicLightsEnabled;horizontal=$script:musicHorizontalEnabled;followNetease=$script:musicFollowNetease;nowPlaying=$script:musicNowPlaying;color=$script:musicColorEnabled;error=$script:musicLastError}}
   $a=$script:widgetMusic.Audio;$m=$script:widgetMusic.Motion
-  return @{enabled=$true;lights=$script:musicLightsEnabled;horizontal=$script:musicHorizontalEnabled;color=$script:musicColorEnabled;paused=$script:widgetMusic.Paused;running=[bool]($a -and $a.Running);source=if($a){$a.Source}else{'system-playback'};sourceProcessId=if($a){$a.SourceProcessId}else{0};captureReadyMs=if($a){$a.CaptureReadyMs}else{0};firstPacketMs=if($a){$a.FirstPacketMs}else{0};
+  return @{enabled=$true;lights=$script:musicLightsEnabled;horizontal=$script:musicHorizontalEnabled;followNetease=$script:musicFollowNetease;nowPlaying=$script:musicNowPlaying;color=$script:musicColorEnabled;paused=$script:widgetMusic.Paused;running=[bool]($a -and $a.Running);source=if($a){$a.Source}else{'system-playback'};sourceProcessId=if($a){$a.SourceProcessId}else{0};captureReadyMs=if($a){$a.CaptureReadyMs}else{0};firstPacketMs=if($a){$a.FirstPacketMs}else{0};
     beats=if($a){$a.BeatSequence}else{0};onsets=if($a){$a.Sequence}else{0};rhythmLocked=[bool]($a -and $a.RhythmLocked);bpm=if($a){$a.Bpm}else{0};confidence=if($a){$a.Confidence}else{0};
     tracking=if(!$a -or !$a.RhythmLocked){'acquiring'}elseif($a.BassCycle){'bass-cycle'}else{'onsets'};
     nextBeatAtMs=if($a){$a.NextBeatAtMs}else{0};periodMs=if($a){$a.PeriodMs}else{0};audioLagMs=if($a){$a.AudioLagMs}else{0};

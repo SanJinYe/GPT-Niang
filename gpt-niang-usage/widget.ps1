@@ -23,6 +23,7 @@ $null=New-Item -ItemType Directory -Path $script:dataDir -Force
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\music.ps1'),[Text.Encoding]::UTF8)))
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime\quote-layout.ps1'),[Text.Encoding]::UTF8)))
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime/dual-quota.ps1'),[Text.Encoding]::UTF8)))
+. ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime/lyrics.ps1'),[Text.Encoding]::UTF8)))
 Initialize-WidgetQuoteLayouts $script:appDir
 Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase,System.Windows.Forms,System.Drawing
 Add-Type -TypeDefinition @'
@@ -159,13 +160,14 @@ try{$settings=[IO.File]::ReadAllText($settingsFile,[Text.Encoding]::UTF8) | Conv
 }catch{$script:settingsLoadFailed=$true;[IO.File]::WriteAllText((Join-Path $script:dataDir 'settings-load-error.txt'),($_ | Out-String),[Text.UTF8Encoding]::new($false))}
 if($settings.musicHorizontalEnabled-is [bool]){$script:musicHorizontalEnabled=$settings.musicHorizontalEnabled}
 if($settings.musicLightsEnabled-is [bool]){$script:musicLightsEnabled=$settings.musicLightsEnabled}
+if($settings.musicFollowNetease-is [bool]){$script:musicFollowNetease=$settings.musicFollowNetease}
 Initialize-WidgetAutoQuoteSettings $settings
 Initialize-CompletionNotificationState $settings
 function Write-WidgetJson($file,$value){
   $temp=$file+'.tmp';[IO.File]::WriteAllText($temp,($value|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
   if([IO.File]::Exists($file)){[IO.File]::Replace($temp,$file,($file+'.bak'),$true)}else{[IO.File]::Move($temp,$file)}
 }
-function Save-Settings {Write-WidgetJson $settingsFile @{layoutVersion=2;musicHorizontalEnabled=$script:musicHorizontalEnabled;musicLightsEnabled=$script:musicLightsEnabled;right=$script:offsetRight;left=$script:offsetLeft;bottom=$script:offsetBottom;anchor=$script:anchor;side=$script:side;scale=$script:scale;bubbleScale=$script:bubbleScale;collapsed=$script:collapsed;soundOn=$script:soundOn;soundVolume=$script:soundVolume;bubbleTapAdvance=$script:bubbleTapAdvance;hideMenu=$script:hideMenu;colorMode=$script:colorMode;colorChance=$script:colorChance;colorTextChance=$script:colorTextChance;colorPaused=$script:colorPaused;followHost=$script:followHost;desktopTopmost=$script:desktopTopmost;desktopLeft=$script:desktopLeft;desktopTop=$script:desktopTop;characterId=$script:characterId;autoQuoteEnabled=$script:autoQuoteEnabled;autoQuoteIntervalSeconds=$script:autoQuoteIntervalSeconds;taskCompletionBubble=$script:completionNotificationsEnabled}}
+function Save-Settings {Write-WidgetJson $settingsFile @{layoutVersion=2;musicHorizontalEnabled=$script:musicHorizontalEnabled;musicFollowNetease=$script:musicFollowNetease;musicLightsEnabled=$script:musicLightsEnabled;right=$script:offsetRight;left=$script:offsetLeft;bottom=$script:offsetBottom;anchor=$script:anchor;side=$script:side;scale=$script:scale;bubbleScale=$script:bubbleScale;collapsed=$script:collapsed;soundOn=$script:soundOn;soundVolume=$script:soundVolume;bubbleTapAdvance=$script:bubbleTapAdvance;hideMenu=$script:hideMenu;colorMode=$script:colorMode;colorChance=$script:colorChance;colorTextChance=$script:colorTextChance;colorPaused=$script:colorPaused;followHost=$script:followHost;desktopTopmost=$script:desktopTopmost;desktopLeft=$script:desktopLeft;desktopTop=$script:desktopTop;characterId=$script:characterId;autoQuoteEnabled=$script:autoQuoteEnabled;autoQuoteIntervalSeconds=$script:autoQuoteIntervalSeconds;taskCompletionBubble=$script:completionNotificationsEnabled}}
 function Set-WidgetCharacter([string]$Id,[switch]$NoSave) {
   if($script:widgetMusic -and $script:widgetMusic.Enabled){Stop-WidgetMusic}
   $character=Get-WidgetCharacter $script:appDir $script:dataDir $Id
@@ -379,7 +381,7 @@ function Set-BubbleState {
 }
 $script:bubbleEpoch=0;$script:closeTimer=$null
 function Restart-SceneTtl([int]$renderDelay=0,[long]$now=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()){
-  $script:sceneStartedAt=$now+$renderDelay;$script:sceneDeadline=$script:sceneStartedAt+5000
+  $script:sceneStartedAt=$now+$renderDelay;$script:sceneDeadline=if($script:bubbleMode-eq 'lyrics' -and (Test-WidgetMusicPlaying)){0}else{$script:sceneStartedAt+5000}
   Set-ResetTimeMode 'countdown' $now
   if($script:resetPhaseTimer){$script:resetPhaseTimer.Stop();$script:resetPhaseTimer=$null}
   if(!$script:collapsed -and $script:bubbleMode-eq 'quota'){
@@ -406,6 +408,7 @@ function Restart-SceneTtl([int]$renderDelay=0,[long]$now=[DateTimeOffset]::UtcNo
   }
 }
 function Tick-Scene([long]$now){
+  Update-WidgetLyricScene
   if($script:completionTemporary){return}
   if(!$script:collapsed -and $script:bubbleMode-eq 'completion' -and !(Test-CompletionDisplayAllowed ([bool]$script:window.IsVisible))){Pause-CompletionNotification;return}
   if($script:settingsSizePreview){return}
@@ -438,6 +441,7 @@ function Apply-Scene {
   Set-WidgetSceneLayout
   if($script:widgetColors){Update-WidgetColorScene}
   $quota=$script:bubbleMode-eq 'quota'
+  if($script:widgetMusic){$script:widgetMusic.AllowLyricsBubble=(!$script:collapsed -and $script:bubbleMode-eq 'lyrics')}
   $script:ui.CodexPanel.Visibility=if($script:quotaProvider-eq 'Codex'){'Visible'}else{'Collapsed'}
   $script:ui.ArkPanel.Visibility=if($script:quotaProvider-eq 'Ark'){'Visible'}else{'Collapsed'}
   $script:ui.Header.Text=$script:quotaProvider+' 剩余额度'
@@ -447,7 +451,7 @@ function Apply-Scene {
   Update-BubbleTooltip
 }
 function Update-BubbleTooltip {
-  $copy=if($script:bubbleMode-in @('quote','completion')){$script:ui.QuoteText.Tag}else{
+  $copy=if($script:bubbleMode-in @('quote','lyrics','completion')){$script:ui.QuoteText.Tag}else{
     $parts=@()
     if($script:quotaProvider-eq 'Codex' -and $script:status.planLabel){$parts+='当前套餐：'+$script:status.planLabel}
     foreach($row in (Get-AllQuotaRows)){
@@ -485,11 +489,13 @@ function Update-BubbleTooltip {
 }
 
 function Switch-Scene([string]$mode){
+  if($mode-eq 'quote' -and (Test-WidgetMusicPlaying)){$mode='lyrics'}
   if($script:collapsed){return}
   if($script:bubbleMode-eq 'completion' -and $mode-ne 'completion'){Dismiss-CompletionNotification}
   Reset-WidgetAutoQuoteSchedule
   $script:sceneRevision++;$script:bubbleMode=$mode
   if($mode-eq 'quote'){$script:ui.QuoteText.Text=Get-WidgetBubbleQuote $script:dataDir;Fit-QuoteText}
+  if($mode-eq 'lyrics'){Set-WidgetLyricText}
   if($script:sceneTimer){$script:sceneTimer.Stop()}
   Animate-Value $script:ui.SceneText ([Windows.UIElement]::OpacityProperty) 0 120
   $script:sceneTimer=New-Object Windows.Threading.DispatcherTimer
@@ -539,12 +545,14 @@ function Show-Quota {
   if($wasCollapsed){Request-Refresh}
 }
 function Show-Quote {Open-WidgetBubble 'quote'}
-function Open-WidgetBubble([ValidateSet('quota','quote','completion')][string]$Mode) {
+function Open-WidgetBubble([ValidateSet('quota','quote','lyrics','completion')][string]$Mode) {
+  if($Mode-eq 'quote' -and (Test-WidgetMusicPlaying)){$Mode='lyrics'}
   Reset-WidgetAutoQuoteSchedule
   if(!$script:collapsed){if($Mode-eq 'quote' -or $script:bubbleMode-ne $Mode){Switch-Scene $Mode}else{Restart-SceneTtl};return}
   $script:bubbleEpoch++;$script:collapsed=$false;$script:sceneRevision++
   $script:bubbleMode=$Mode
   if($Mode-eq 'quote'){$script:ui.QuoteText.Text=Get-WidgetBubbleQuote $script:dataDir;Fit-QuoteText}
+  if($Mode-eq 'lyrics'){Set-WidgetLyricText}
   if($Mode-eq 'completion'){$script:ui.QuoteText.Text="Codex`n有回复已结束";Fit-QuoteText}
   Apply-Scene
   if($script:sceneTimer){$script:sceneTimer.Stop()}
@@ -923,6 +931,7 @@ function Stop-WidgetRuntime {
   if($script:runtimeClosed){return};$script:runtimeClosed=$true
   try{if($script:occlusionRecovery){$script:occlusionRecovery.Dispose()}}catch{}
   try{Stop-ArkQuotaRead}catch{}
+  try{Stop-WidgetMusicBridge}catch{}
   try{Stop-WidgetMusic}catch{}
   try{if($script:hostFollower){$script:hostFollower.Dispose()}}catch{}
   foreach($timer in @($script:settingsMenuDismissTimer,$script:timer,$script:hostEventTimer,$script:menuTimer,$script:sceneTimer,$script:resetPhaseTimer,$script:closeTimer)){try{if($timer){$timer.Stop()}}catch{}}
@@ -953,7 +962,7 @@ function Tick-Widget {
   Ensure-QuotaWorker $now
   if($script:completionTemporary){
     if($script:occlusionRecovery){$script:occlusionRecovery.Configure([IntPtr]::Zero,$false)}
-    if($now-$script:lastPresence-ge 1000){Write-WidgetPresence $true $now;$script:lastPresence=$now;Update-Quota;Read-DisplayRequest;Tick-CompletionNotifications $true}
+    if($now-$script:lastPresence-ge 1000){Write-WidgetPresence $true $now;$script:lastPresence=$now;Update-Quota;Read-DisplayRequest;Update-WidgetNowPlaying;Tick-CompletionNotifications $true}
     return
   }
   $foreground=[GptWidgetNative]::GetAncestor([GptWidgetNative]::GetForegroundWindow(),2)
@@ -1030,6 +1039,7 @@ function Tick-Widget {
     Write-WidgetPresence ([bool]$visible) $now
     Update-Quota;$script:lastPresence=$now
     Read-DisplayRequest
+    Update-WidgetNowPlaying
     Tick-CompletionNotifications ([bool]$visible)
     Tick-WidgetAutoQuote $now ([bool]$visible)
   }

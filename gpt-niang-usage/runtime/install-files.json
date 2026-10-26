@@ -12,6 +12,7 @@
   "runtime/completion-monitor.mjs",
   "runtime/completion-notifications.ps1",
   "runtime/dual-quota.ps1",
+  "runtime/lyrics.ps1",
   "runtime/music.ps1",
   "runtime/music-audio.cs",
   "runtime/music-visual.cs",

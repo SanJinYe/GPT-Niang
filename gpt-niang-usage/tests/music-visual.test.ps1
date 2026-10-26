@@ -120,6 +120,10 @@ try{
  if($music.Motion.Time-le $withoutLightsTime){throw 'Dance frames stopped with lights disabled'}
  $music.LightsEnabled=$true;Pump 100
  if($music.LampHandle-eq [IntPtr]::Zero){throw 'Enabling lights must recreate the surface while dancing'}
+ $music.Motion.Phase=2;$window.FindName('Bubble').Visibility='Visible';$music.AllowLyricsBubble=$true;Pump 100
+ if($music.Paused){throw 'Persistent lyrics paused music animation'}
+ $music.AllowLyricsBubble=$false;Pump 100
+ if(!$music.Paused){throw 'Normal quota bubble no longer pauses interaction'}
  $music.Stop($false);$after=New-Object MusicVisualProbe+Rect;[MusicVisualProbe]::GetWindowRect($handle,[ref]$after)|Out-Null
  if($after.Left-ne $rect.Left -or $after.Top-ne $rect.Top){throw 'Closing music did not restore the original native position'}
  if([Windows.Controls.Canvas]::GetLeft($girl)-ne $left -or [Windows.Controls.Canvas]::GetTop($girl)-ne $top -or $girl.RenderTransform-ne $transform){throw 'Normal character layout was not restored'}

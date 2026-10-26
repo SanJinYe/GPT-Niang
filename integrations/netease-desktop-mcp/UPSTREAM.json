@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/WalterT812/netease-desktop-mcp",
+  "commit": "1e5c2b11bca5c4126e0d651e4f46d77da8a45508",
+  "local_changes": [
+    "Duplicate marquee title compatibility",
+    "Current track ID and playback position",
+    "Timed lyric reader and MCP tool",
+    "Widget state bridge"
+  ]
+}
