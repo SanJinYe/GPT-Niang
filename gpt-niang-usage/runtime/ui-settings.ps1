@@ -189,7 +189,11 @@ function Initialize-WidgetSettingsMenu {
   $script:settingsMenuUi.Tap=Add-SettingsAction '点角色也切换内容' {param($sender,$event)$script:bubbleTapAdvance=$sender.IsChecked;Save-Settings} -Description '开启后，连续点角色就能看下一句' -Checkable -ReturnItem
   } -ReturnItem
   Add-SettingsAction '编辑我的语录' {Open-QuoteEditor}
-  $script:settingsMenuUi.MusicEnabled=Add-SettingsAction '音乐律动' {param($sender,$event)Set-WidgetMusicEnabled ([bool]$sender.IsChecked);$script:context.IsOpen=$false} -Checkable -ReturnItem
+  Add-SettingsSubmenu '音乐律动' {
+  $script:settingsMenuUi.MusicEnabled=Add-SettingsAction '开启律动' {param($sender,$event)Set-WidgetMusicEnabled ([bool]$sender.IsChecked);$script:context.IsOpen=$false} -Checkable -ReturnItem
+  $script:settingsMenuUi.MusicHorizontal=Add-SettingsAction '左右移动' {param($sender,$event)Set-WidgetMusicHorizontal ([bool]$sender.IsChecked)} -Description '关闭后原地律动；仍可拖动角色调整位置' -Checkable -ReturnItem
+  $script:settingsMenuUi.MusicLights=Add-SettingsAction '迪灯与背景灯光' {param($sender,$event)Set-WidgetMusicLights ([bool]$sender.IsChecked)} -Description '关闭后只保留角色律动，下次仍记住选择' -Checkable -ReturnItem
+  }
   $script:settingsMenuUi.MusicEnabled.ToolTip='先听几拍确认节奏，再跟拍。拿起时按设置的双倍概率决定人物是否变色；拖动后松手可甩出，碰边反弹、落地继续跟拍。关闭后恢复原位置。'
   $script:settingsMenuUi.AutoQuotes=Add-SettingsSubmenu '自动语录' {
     $script:settingsMenuUi.AutoQuoteEnabled=Add-SettingsAction '开启自动语录' {param($sender,$event)Set-WidgetAutoQuoteSettings ([bool]$sender.IsChecked) $script:autoQuoteIntervalSeconds;Update-WidgetSettingsMenu} -Checkable -ReturnItem
@@ -268,6 +272,8 @@ function Update-WidgetSettingsMenu{
   try{
     Update-WidgetUpdateMenu
     $script:settingsMenuUi.MusicEnabled.IsChecked=Test-WidgetMusicActive
+    $script:settingsMenuUi.MusicLights.IsChecked=$script:musicLightsEnabled
+    $script:settingsMenuUi.MusicHorizontal.IsChecked=$script:musicHorizontalEnabled
     $script:settingsMenuUi.Completion.IsChecked=$script:completionNotificationsEnabled
     $script:settingsMenuUi.AutoQuoteEnabled.IsChecked=$script:autoQuoteEnabled
     foreach($choice in $script:settingsMenuUi.AutoQuoteIntervals){$choice.IsChecked=[int]$choice.Tag-eq $script:autoQuoteIntervalSeconds}

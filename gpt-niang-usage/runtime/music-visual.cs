@@ -14,6 +14,7 @@ public sealed class GptMusicMotion {
     double landed,lockStartPose,lastPointerX,lastPointerY,flightCeiling,pointerIdle;bool wasLocked,hasPointer,throwMomentum;
     public double ThrowX,ThrowY,FigureHeight;
     public double ReleaseIdleMs {get;private set;}
+    public bool HorizontalTravelEnabled=true;
     public bool Held {get;private set;}
     public void BeginHold(){Held=true;wasLocked=false;Energy=0;BendSpeed=4;Vy=0;Props=0;ThrowX=ThrowY=0;pointerIdle=ReleaseIdleMs=0;hasPointer=false;throwMomentum=false;}
     public void BeginHold(double pointerX,double pointerY){BeginHold();lastPointerX=pointerX;lastPointerY=pointerY;hasPointer=true;}
@@ -117,6 +118,8 @@ public sealed class GptMusicMotion {
         Spring(ref Lamp,ref LampSpeed,locked?8*Math.Sin(Math.PI*Cycle)*Energy:0,dt,9,.75);
         // Ground contact absorbs the vertical bounce, not the user's sideways
         // throw. Let that momentum glide out while the musical pose continues.
+        // Only automatic ground travel is optional; pickup and throws remain interactive.
+        if(!HorizontalTravelEnabled){Vx=0;throwMomentum=false;return;}
         if(throwMomentum&&Math.Abs(Vx)>35*Dpi){MoveAir(dt,.75);return;}
         throwMomentum=false;
         double margin=Margin;
@@ -157,6 +160,20 @@ public sealed class GptMusicVisual : IDisposable {
     static readonly Color RoomColor=Color.FromArgb(145,10,7,23);
     public bool Enabled {get;private set;}
     public bool ColorEnabled {get;set;}
+    bool horizontalTravelEnabled=true;
+    public bool HorizontalTravelEnabled {get{return horizontalTravelEnabled;}set{
+        horizontalTravelEnabled=value;
+        if(Motion!=null)Motion.HorizontalTravelEnabled=value;
+    }}
+    bool lightsEnabled=true;
+    public bool LightsEnabled {get{return lightsEnabled;}set{
+        lightsEnabled=value;
+        if(!value){
+            if(FollowLamp!=null)FollowLamp(IntPtr.Zero,0,0,0);
+            if(lampSource!=null){lampSource.Dispose();lampSource=null;lampArt=null;lampBand=-1;}
+        }
+        Redraw();
+    }}
     public Action<IntPtr,int,int,int> FollowLamp {get;set;}
     public Func<int[]> HostFrame {get;set;}
     public bool Paused {get;private set;}
@@ -227,6 +244,7 @@ public sealed class GptMusicVisual : IDisposable {
         MeasureAnchor();var frame=FrameBounds();allowed=frame.Width>=64*dpi&&frame.Height>=64*dpi;
         if(Motion==null&&allowed){
             Motion=new GptMusicMotion(initialFoot.X-frame.Left,initialFoot.Y-frame.Top,frame.Width,frame.Height,figurePhysical,dpi);
+            Motion.HorizontalTravelEnabled=horizontalTravelEnabled;
             Motion.FigureHeight=figurePhysical*alpha.Height/alpha.Width;
             int px=(int)Math.Round(initialFoot.X-anchorX),py=(int)Math.Round(initialFoot.Y-anchorY);
             if(follow)followOffset((int)Math.Round(px-(frame.Left+relativeX)),(int)Math.Round(py-(frame.Bottom-bottomDistance)));
@@ -300,6 +318,7 @@ public sealed class GptMusicVisual : IDisposable {
         } catch(Exception ex) {Error=ex.ToString();Stop(false);}
     }
     void PositionLamp(Rect frame,bool show,bool redraw) {
+        if(!lightsEnabled)return;
         if(!show){if(lampSource!=null&&MusicNative.IsWindowVisible(lampSource.Handle))MusicNative.ShowWindow(lampSource.Handle,0);return;}
         double d=Math.Max(32,Math.Min(72,figurePhysical*.42))/dpi,w=frame.Width/dpi,h=frame.Height/dpi;
         if(lampSource==null) {

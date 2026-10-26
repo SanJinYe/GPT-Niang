@@ -114,6 +114,12 @@ try{
  if($music.Motion.Time-lt $beforeHoldTime+.18){throw 'Native music simulation stopped requesting frames during pickup'}
  $music.EndHold();Pump 1800
  if(!$music.Enabled -or $music.Motion.Held -or $music.Motion.Phase-ne 2 -or $music.Motion.Impacts-ne 3){throw 'Native release did not land and return to music mode'}
+ $music.LightsEnabled=$false;Pump 100
+ if($music.LampHandle-ne [IntPtr]::Zero -or !$music.Enabled){throw 'Disabling lights must destroy the light surface without stopping dance'}
+ $withoutLightsTime=$music.Motion.Time;Pump 100
+ if($music.Motion.Time-le $withoutLightsTime){throw 'Dance frames stopped with lights disabled'}
+ $music.LightsEnabled=$true;Pump 100
+ if($music.LampHandle-eq [IntPtr]::Zero){throw 'Enabling lights must recreate the surface while dancing'}
  $music.Stop($false);$after=New-Object MusicVisualProbe+Rect;[MusicVisualProbe]::GetWindowRect($handle,[ref]$after)|Out-Null
  if($after.Left-ne $rect.Left -or $after.Top-ne $rect.Top){throw 'Closing music did not restore the original native position'}
  if([Windows.Controls.Canvas]::GetLeft($girl)-ne $left -or [Windows.Controls.Canvas]::GetTop($girl)-ne $top -or $girl.RenderTransform-ne $transform){throw 'Normal character layout was not restored'}

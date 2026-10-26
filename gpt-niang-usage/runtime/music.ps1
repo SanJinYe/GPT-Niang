@@ -1,6 +1,18 @@
 $script:widgetMusic=$null
 $script:musicColorEnabled=$false
 $script:musicLastError=$null
+$script:musicLightsEnabled=$true
+$script:musicHorizontalEnabled=$true
+function Set-WidgetMusicHorizontal([bool]$Enabled) {
+  $script:musicHorizontalEnabled=$Enabled
+  if(Test-WidgetMusicActive){$script:widgetMusic.HorizontalTravelEnabled=$Enabled}
+  Save-Settings
+}
+function Set-WidgetMusicLights([bool]$Enabled) {
+  $script:musicLightsEnabled=$Enabled
+  if(Test-WidgetMusicActive){$script:widgetMusic.LightsEnabled=$Enabled}
+  Save-Settings
+}
 function Initialize-WidgetMusicTypes {
   if('GptMusicVisual' -as [type]){return}
   Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase,System.Xaml,System.Windows.Forms,System.Drawing
@@ -46,6 +58,8 @@ function Set-WidgetMusicEnabled([bool]$Enabled) {
     $script:widgetMusic=[GptMusicVisual]::new($script:window,$script:ui.Girl,$script:ui.Bubble,$move,$colors,($script:characterId-eq 'gpt-dragon'))
     $script:widgetMusic.FollowLamp=[Delegate]::CreateDelegate([Action[IntPtr,int,int,int]],$script:hostFollower,'SetCompanion')
     $script:widgetMusic.HostFrame=[Delegate]::CreateDelegate([Func[int[]]],$script:hostFollower,'GetFrame')
+    $script:widgetMusic.LightsEnabled=$script:musicLightsEnabled
+    $script:widgetMusic.HorizontalTravelEnabled=$script:musicHorizontalEnabled
     Update-WidgetMusicPlacement (Get-WidgetPlacementFrame) (Get-WidgetPlacementDpi) $normal.Left $normal.Top $true
     Update-WidgetColorScene
     $script:lastPosition=$null;Tick-Widget
@@ -77,9 +91,9 @@ function Update-WidgetMusicVisibility([bool]$Visible,[bool]$Blocked=$false) {
   }
 }
 function Get-WidgetMusicStatus {
-  if(!(Test-WidgetMusicActive)){return @{enabled=$false;color=$script:musicColorEnabled;error=if($script:widgetMusic -and $script:widgetMusic.Error){$script:widgetMusic.Error}else{$script:musicLastError}}}
+  if(!(Test-WidgetMusicActive)){return @{enabled=$false;lights=$script:musicLightsEnabled;horizontal=$script:musicHorizontalEnabled;color=$script:musicColorEnabled;error=if($script:widgetMusic -and $script:widgetMusic.Error){$script:widgetMusic.Error}else{$script:musicLastError}}}
   $a=$script:widgetMusic.Audio;$m=$script:widgetMusic.Motion
-  return @{enabled=$true;color=$script:musicColorEnabled;paused=$script:widgetMusic.Paused;running=[bool]($a -and $a.Running);source=if($a){$a.Source}else{'system-playback'};sourceProcessId=if($a){$a.SourceProcessId}else{0};captureReadyMs=if($a){$a.CaptureReadyMs}else{0};firstPacketMs=if($a){$a.FirstPacketMs}else{0};
+  return @{enabled=$true;lights=$script:musicLightsEnabled;horizontal=$script:musicHorizontalEnabled;color=$script:musicColorEnabled;paused=$script:widgetMusic.Paused;running=[bool]($a -and $a.Running);source=if($a){$a.Source}else{'system-playback'};sourceProcessId=if($a){$a.SourceProcessId}else{0};captureReadyMs=if($a){$a.CaptureReadyMs}else{0};firstPacketMs=if($a){$a.FirstPacketMs}else{0};
     beats=if($a){$a.BeatSequence}else{0};onsets=if($a){$a.Sequence}else{0};rhythmLocked=[bool]($a -and $a.RhythmLocked);bpm=if($a){$a.Bpm}else{0};confidence=if($a){$a.Confidence}else{0};
     tracking=if(!$a -or !$a.RhythmLocked){'acquiring'}elseif($a.BassCycle){'bass-cycle'}else{'onsets'};
     nextBeatAtMs=if($a){$a.NextBeatAtMs}else{0};periodMs=if($a){$a.PeriodMs}else{0};audioLagMs=if($a){$a.AudioLagMs}else{0};
