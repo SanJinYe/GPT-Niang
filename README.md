@@ -6,7 +6,23 @@
 
 [获取本分支源码](https://github.com/SanJinYe/GPT-Niang/tree/feature/local-companion-customizations) · [安装与启动](#安装与启动) · [使用方法](#使用方法) · [配置额度来源](#配置额度来源) · [音乐接入](#音乐接入) · [反馈问题](https://github.com/SanJinYe/GPT-Niang/issues)
 
-<img src="gpt-niang-usage/assets/gpt-dragon-niang-bust.png" alt="GPT 娘默认半身形象" width="220">
+<table>
+  <tr>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/gpt-dragon-niang-bust.png" alt="GPT 娘默认／下方形象" height="180"><br>默认／下方</td>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/top.png" alt="GPT 娘上方倒挂形象" height="180"><br>上方倒挂</td>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/drag-pickup-sheet.png" alt="GPT 娘提起四帧形象" height="180"><br>提起四帧</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/side-left.png" alt="GPT 娘左侧扒框形象" height="180"><br>左侧扒框</td>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/side-right.png" alt="GPT 娘右侧扒框形象" height="180"><br>右侧扒框</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/top-left.png" alt="GPT 娘左上抢镜形象" height="180"><br>左上抢镜</td>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/top-right.png" alt="GPT 娘右上抢镜形象" height="180"><br>右上抢镜</td>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/bottom-left.png" alt="GPT 娘左下抢镜形象" height="180"><br>左下抢镜</td>
+    <td align="center"><img src="https://raw.githubusercontent.com/SanJinYe/GPT-Niang/feature/local-companion-customizations/gpt-niang-usage/assets/dock-poses/bottom-right.png" alt="GPT 娘右下抢镜形象" height="180"><br>右下抢镜</td>
+  </tr>
+</table>
 
 ## 新增功能
 
@@ -61,16 +77,6 @@ Codex → 来源 1 → 来源 2 → … → 台词／歌词 → 收起
 提起后的免吸附期为 **min（0.5 秒，松开鼠标）**。豁免结束且满足条件时，吸附动画直接替换当前动画，不先闪回默认形象。边缘判定带防抖，停在原处不会反复播放。
 
 侧边使用扒框形象，角落使用抢镜探头形象，上沿使用头发自然下垂的倒挂形象。各姿势按面部大小校准；当前提起图为校准尺寸的 0.9 倍。这些专属姿势用于内置 GPT 娘，自定义导入图片保持其原有形象。
-
-<details>
-<summary>查看位置形象与提起动画帧</summary>
-
-<img src="gpt-niang-usage/assets/dock-poses/side-left.png" alt="侧边扒框形象" width="150">
-<img src="gpt-niang-usage/assets/dock-poses/bottom-right.png" alt="角落抢镜形象" width="180">
-<img src="gpt-niang-usage/assets/dock-poses/top.png" alt="倒挂形象" width="130">
-<img src="gpt-niang-usage/assets/dock-poses/drag-pickup-sheet.png" alt="提起动画四帧图" width="240">
-
-</details>
 
 ### 右键：统一设置
 
