@@ -3,6 +3,9 @@ $appDir=Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'supervisor-task.ps1')
 try{
   $info=Get-WidgetSupervisorInfo $appDir
+  # An update transaction owns the install while it runs. Starting or migrating
+  # the task here could clear its stop markers and race the GUI it is replacing.
+  if(Test-WidgetSupervisorUpdateActive $info){return}
   $installed=Get-WidgetSupervisorTask $info
   if($installed){Start-WidgetSupervisorTask $appDir}else{Register-WidgetSupervisorTask $appDir|Out-Null}
   [IO.File]::WriteAllText((Join-Path $info.DataDir 'refresh.flag'),([DateTime]::UtcNow.ToString('o')+' '+[Guid]::NewGuid().ToString('N')))

@@ -14,7 +14,8 @@ $testApp=Join-Path $testRoot 'app'
 
 $testData=Join-Path $testRoot 'state'
 
-$files=@('widget.ps1','widget.xaml','runtime\start-widget.ps1','runtime\quotes.ps1','runtime\completion-notifications.ps1','runtime\ui-settings.ps1','runtime\characters.ps1','runtime\character-gallery.ps1','runtime\update-ui.ps1','runtime\update-common.ps1','runtime\color-theme.ps1','runtime\music.ps1','runtime\music-audio.cs','runtime\music-visual.cs','runtime\quote-layout.ps1','runtime\audio.ps1','runtime\audio-import.mjs','runtime\host-layer.ps1','runtime\host-follow.ps1','runtime\host-ready.ps1','runtime\host-occlusion.ps1','runtime\supervisor-task.ps1','assets\quotes.json','assets\quote-layouts.json','assets\gpt-dragon-niang-bust.png','assets\characters.json')
+# Use the shipping manifest so newly added runtime modules are exercised too.
+$files=@(Get-Content -LiteralPath (Join-Path $source 'runtime\install-files.json') -Raw -Encoding UTF8|ConvertFrom-Json)
 
 $directories=@($testRoot,$testApp,$testData,(Join-Path $testApp 'runtime'),(Join-Path $testApp 'assets'),(Join-Path $testApp 'assets\characters'))
 
@@ -22,7 +23,11 @@ try{
 
   foreach($directory in $directories){$null=New-Item -ItemType Directory -Path $directory}
 
-  foreach($file in $files){Copy-Item -LiteralPath (Join-Path $source $file) -Destination (Join-Path $testApp $file)}
+  foreach($file in $files){
+    $target=Join-Path $testApp $file
+    $null=[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+    Copy-Item -LiteralPath (Join-Path $source $file) -Destination $target
+  }
 
   # Synthetic fixture exercises an alternate image without distributing third-party artwork.
 
@@ -92,12 +97,6 @@ try{
 
   if(!$resolved.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved)-notlike 'gpt-niang-entrypoint-*'){throw 'Unsafe entrypoint test cleanup path.'}
 
-  foreach($file in ($files+@('installation.json','preview.png','assets\characters\test-alternative.png'))){$target=Join-Path $testApp $file;if(Test-Path -LiteralPath $target){Remove-Item -LiteralPath $target}}
-
-  foreach($file in @('status.json','settings.json')){$target=Join-Path $testData $file;if(Test-Path -LiteralPath $target){Remove-Item -LiteralPath $target}}
-
-  [Array]::Reverse($directories)
-
-  foreach($directory in $directories){if(Test-Path -LiteralPath $directory){Remove-Item -LiteralPath $directory}}
+  if(Test-Path -LiteralPath $resolved){Remove-Item -LiteralPath $resolved -Recurse -Force}
 
 }

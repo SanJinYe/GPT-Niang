@@ -115,6 +115,111 @@ function Resolve-WidgetSupervisorSid([string]$Identity){
   return ([Security.Principal.NTAccount]::new($Identity)).Translate([Security.Principal.SecurityIdentifier]).Value
 }
 
+function Convert-WidgetSupervisorPeriod([string]$Value) {
+  if($null-eq $Value){return $null}
+  if($Value-is [TimeSpan]){return $Value}
+  $text=[string]$Value
+  if(!$text){return $null}
+  try{return [Xml.XmlConvert]::ToTimeSpan($text)}catch{}
+  try{return [TimeSpan]::Parse($text,[Globalization.CultureInfo]::InvariantCulture)}catch{}
+  return $null
+}
+
+function Get-WidgetSupervisorTaskTriggerKind($Trigger) {
+  $class=''
+  try{if($Trigger.CimClass){$class=[string]$Trigger.CimClass.CimClassName}}catch{}
+  if($class-match 'Logon'){return 'logon'}
+  if($class-match 'Time'){return 'time'}
+  if(!$class-and $Trigger.Repetition){return 'time'}
+  return 'unknown'
+}
+
+function Get-WidgetSupervisorTaskPolicyIssues {
+  # Only the recovery-relevant policy is compared. Re-registering on cosmetic
+  # differences would stop a healthy supervisor on every widget launch.
+  param($Task,[Parameter(Mandatory=$true)]$Info)
+  $issues=New-Object 'Collections.Generic.List[string]'
+  if(!$Task){$issues.Add('task-missing');return $issues.ToArray()}
+  $logon=@();$recovery=@()
+  foreach($trigger in @($Task.Triggers)){
+    switch(Get-WidgetSupervisorTaskTriggerKind $trigger){
+      'logon'{$logon+=$trigger}
+      'time'{$recovery+=$trigger}
+      default{$issues.Add('unexpected-trigger')}
+    }
+  }
+  if($logon.Count-ne 1){$issues.Add('logon-trigger')}
+  else {
+    if($logon[0].Enabled-eq $false){$issues.Add('logon-disabled')}
+    $user=[string]$logon[0].UserId
+    if($user){
+      try{if((Resolve-WidgetSupervisorSid $user)-ne $Info.Sid){$issues.Add('logon-owner')}}catch{$issues.Add('logon-owner')}
+    }
+  }
+  if($recovery.Count-ne 1){$issues.Add('recovery-trigger')}
+  else {
+    $trigger=$recovery[0]
+    if($trigger.Enabled-eq $false){$issues.Add('recovery-disabled')}
+    $interval=Convert-WidgetSupervisorPeriod ([string]$trigger.Repetition.Interval)
+    if($null-eq $interval -or $interval-ne [TimeSpan]::FromMinutes(1)){$issues.Add('recovery-interval')}
+    $duration=if($trigger.Repetition){$trigger.Repetition.Duration}else{$null}
+    if($null-ne $duration -and [string]$duration){
+      $span=Convert-WidgetSupervisorPeriod ([string]$duration)
+      # Task Scheduler encodes "repeat indefinitely" as TimeSpan.MaxValue
+      # (P10675199DT2H48M5.4775807S); only a real end time expires recovery.
+      if($null-eq $span -or ($span-gt [TimeSpan]::Zero -and $span-ne [TimeSpan]::MaxValue)){$issues.Add('recovery-duration')}
+    }
+    if($trigger.Repetition.StopAtDurationEnd-eq $true){$issues.Add('recovery-stop-at-end')}
+  }
+  $settings=$Task.Settings
+  if(!$settings){$issues.Add('settings-missing')}
+  else {
+    if([string]$settings.MultipleInstances-notin @('IgnoreNew','2')){$issues.Add('multiple-instances')}
+    $limit=Convert-WidgetSupervisorPeriod ([string]$settings.ExecutionTimeLimit)
+    if($null-eq $limit -or $limit-gt [TimeSpan]::Zero){$issues.Add('execution-limit')}
+    if([int]$settings.RestartCount-ne 3){$issues.Add('restart-count')}
+    $restart=Convert-WidgetSupervisorPeriod ([string]$settings.RestartInterval)
+    if($null-eq $restart -or $restart-ne [TimeSpan]::FromMinutes(1)){$issues.Add('restart-interval')}
+    if($settings.StartWhenAvailable-eq $false){$issues.Add('start-when-available')}
+  }
+  return $issues.ToArray()
+}
+
+function Test-WidgetSupervisorTaskAction {
+  param($Task,[Parameter(Mandatory=$true)]$Info)
+  if(!$Task){return $false}
+  $actions=@($Task.Actions)
+  if($actions.Count-ne 1){return $false}
+  $action=$actions[0]
+  if(![string]$action.Execute -or ![string]$action.Arguments -or ![string]$action.WorkingDirectory){return $false}
+  try{
+    return [IO.Path]::GetFullPath([string]$action.Execute)-ieq $Info.Execute -and
+      [string]$action.Arguments-ieq $Info.Arguments -and
+      [IO.Path]::GetFullPath([string]$action.WorkingDirectory).TrimEnd('\')-ieq [IO.Path]::GetFullPath([string]$Info.WorkingDirectory).TrimEnd('\')
+  }catch{return $false}
+}
+
+function Test-WidgetSupervisorEntryCommand {
+  # Detect a supervisor that is itself the scheduled entry. Re-registering or
+  # stopping the task from this process would terminate the recovery that is
+  # still repairing the installation.
+  param([string]$CommandLine,[Parameter(Mandatory=$true)]$Info)
+  if(![string]$CommandLine){return $false}
+  $expected='"'+(Join-Path $Info.AppDir 'runtime\supervisor.ps1')+'"'
+  if($CommandLine.IndexOf($expected,[StringComparison]::OrdinalIgnoreCase)-ge 0){return $true}
+  if($Info.WorkingDirectory-ine $Info.AppDir -and $Info.AgentDir){
+    $stable='"'+(Join-Path $Info.AgentDir 'update-agent.ps1')+'"'
+    return ($CommandLine.IndexOf($stable,[StringComparison]::OrdinalIgnoreCase)-ge 0 -and $CommandLine-match '\s-Supervisor(?:\s|$)')
+  }
+  return $false
+}
+
+function Test-WidgetSupervisorCurrentEntry {
+  param([Parameter(Mandatory=$true)]$Info)
+  try{$self=Get-CimInstance Win32_Process -Filter ('ProcessId='+$PID) -ErrorAction Stop}catch{return $false}
+  return Test-WidgetSupervisorEntryCommand ([string]$self.CommandLine) $Info
+}
+
 function Assert-WidgetSupervisorTaskIdentity {
   param([Parameter(Mandatory=$true)]$Task,[Parameter(Mandatory=$true)]$Info)
   if($Task.TaskName-ine $Info.TaskName -or $Task.TaskPath-ine $Info.TaskPath){throw 'Supervisor task name mismatch.'}
@@ -148,6 +253,21 @@ function Write-WidgetSupervisorJson([string]$File,$Value){
     [IO.File]::WriteAllText($temp,($Value|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
     if([IO.File]::Exists($File)){[IO.File]::Replace($temp,$File,[System.Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($temp,$File)}
   }finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
+}
+
+function Test-WidgetSupervisorUpdateActive {
+  param([Parameter(Mandatory=$true)]$Info)
+  if(Test-Path -LiteralPath (Join-Path $Info.DataDir 'update-installing.json')){return $true}
+  if($Info.WorkingDirectory-ine $Info.AppDir -and $Info.AgentDir){
+    $journalFile=Join-Path $Info.AgentDir 'update-transaction.json'
+    if(Test-Path -LiteralPath $journalFile){
+      # A corrupt transaction is an explicit failure, not permission to start
+      # against a potentially half-replaced installation.
+      $journal=Get-Content -LiteralPath $journalFile -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop
+      if($journal -and [string]$journal.phase-in @('stopping','moving-old','moving-new','registering','registering-old','restoring')){return $true}
+    }
+  }
+  return $false
 }
 
 function Set-WidgetSupervisorPause {
@@ -193,6 +313,7 @@ function New-WidgetSupervisorTaskDefinition {
   # An external trigger also recovers a supervisor killed with the launching app.
   # IgnoreNew and the supervisor mutex keep normal operation single-instance.
   $recoveryTrigger=New-ScheduledTaskTrigger -Once -At ([DateTime]::Now.AddMinutes(1)) -RepetitionInterval ([TimeSpan]::FromMinutes(1))
+  $recoveryTrigger.Repetition.StopAtDurationEnd=$false
   $trigger=@($logonTrigger,$recoveryTrigger)
   $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable -Hidden -RestartCount 3 -RestartInterval ([TimeSpan]::FromMinutes(1))
   New-ScheduledTask -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description 'Keep the local GPT Niang widget attached to the current user Codex main window.'
@@ -203,19 +324,37 @@ function Register-WidgetSupervisorTask {
   $info=Get-WidgetSupervisorInfo $AppDir
   foreach($relative in @('supervisor.vbs','runtime\supervisor.ps1','widget.ps1')){if(!(Test-Path -LiteralPath (Join-Path $info.AppDir $relative))){throw "Missing supervisor file: $relative"}}
   $existing=Get-WidgetSupervisorTask $info
-  if($existing -and [string]$existing.State-eq 'Running'){Stop-WidgetSupervisorTask $AppDir}
+  $selfEntry=Test-WidgetSupervisorCurrentEntry $info
+  $actionCurrent=Test-WidgetSupervisorTaskAction $existing $info
+  $policyIssues=@(Get-WidgetSupervisorTaskPolicyIssues $existing $info)
+  $needsRegistration=!$existing -or !$actionCurrent -or $policyIssues.Count-gt 0
+  # Only interrupt a running supervisor when its definition actually changes.
+  # Replacing a running task definition, or stopping the task from its own
+  # instance, can terminate that instance on Windows.
+  if($needsRegistration -and $existing -and [string]$existing.State-eq 'Running' -and !$selfEntry){Stop-WidgetSupervisorTask $AppDir}
+  # An explicit install or launch resumes the app state even when the task entry
+  # itself is running the recovery. Periodic task starts never reach this path.
   Resume-WidgetSupervisor $AppDir
-  $currentAction=if($existing){@($existing.Actions)[0]}else{$null}
-  # An unchanged stable entry survives program replacement. Replacing the running
-  # recovery task's definition can terminate its own instance on Windows.
-  if(!$currentAction -or [string]$currentAction.Arguments-ine $info.Arguments -or [IO.Path]::GetFullPath($currentAction.WorkingDirectory).TrimEnd('\')-ine $info.WorkingDirectory){
-    $definition=New-WidgetSupervisorTaskDefinition $info
-    Register-ScheduledTask -TaskName $info.TaskName -TaskPath $info.TaskPath -InputObject $definition -Force -ErrorAction Stop|Out-Null
+  $pendingFile=Join-Path $info.DataDir 'supervisor-task-pending.json'
+  if($needsRegistration){
+    if($selfEntry){
+      $reasons=New-Object 'Collections.Generic.List[string]'
+      if(!$existing){$reasons.Add('task-missing')}
+      if($existing -and !$actionCurrent){$reasons.Add('action-changed')}
+      foreach($reason in $policyIssues){$reasons.Add($reason)}
+      Write-WidgetSupervisorJson $pendingFile @{at=[DateTime]::UtcNow.ToString('o');pid=$PID;reason='self-hosted';problems=$reasons.ToArray()}
+    } else {
+      $definition=New-WidgetSupervisorTaskDefinition $info
+      Register-ScheduledTask -TaskName $info.TaskName -TaskPath $info.TaskPath -InputObject $definition -Force -ErrorAction Stop|Out-Null
+      if(Test-Path -LiteralPath $pendingFile){Remove-Item -LiteralPath $pendingFile -ErrorAction SilentlyContinue}
+    }
+  } elseif(Test-Path -LiteralPath $pendingFile){
+    Remove-Item -LiteralPath $pendingFile -ErrorAction SilentlyContinue
   }
   $registered=Get-WidgetSupervisorTask $info
   if(!$registered){throw 'Supervisor task registration not confirmed.'}
   # IgnoreNew handles a running recovery instance; the CIM state can lag a stop.
-  Start-ScheduledTask -TaskName $info.TaskName -TaskPath $info.TaskPath -ErrorAction Stop
+  if(!$selfEntry){Start-ScheduledTask -TaskName $info.TaskName -TaskPath $info.TaskPath -ErrorAction Stop}
   return $info
 }
 
@@ -224,8 +363,20 @@ function Start-WidgetSupervisorTask {
   $info=Get-WidgetSupervisorInfo $AppDir
   $task=Get-WidgetSupervisorTask $info
   if(!$task){throw 'Supervisor task is not installed.'}
-  Resume-WidgetSupervisor $AppDir
-  Start-ScheduledTask -TaskName $info.TaskName -TaskPath $info.TaskPath -ErrorAction Stop
+  $selfEntry=Test-WidgetSupervisorCurrentEntry $info
+  $issues=@(Get-WidgetSupervisorTaskPolicyIssues $task $info)
+  if(!(Test-WidgetSupervisorTaskAction $task $info) -or $issues.Count-gt 0){
+    # Migrate old logon-only definitions from a normal launcher. A self-hosted
+    # recovery must not replace the task it is running under.
+    if(!$selfEntry){return Register-WidgetSupervisorTask $AppDir}
+    $reasons=New-Object 'Collections.Generic.List[string]'
+    if(!(Test-WidgetSupervisorTaskAction $task $info)){$reasons.Add('action-changed')}
+    foreach($issue in $issues){$reasons.Add($issue)}
+    Write-WidgetSupervisorJson (Join-Path $info.DataDir 'supervisor-task-pending.json') @{at=[DateTime]::UtcNow.ToString('o');pid=$PID;reason='self-hosted';problems=$reasons.ToArray()}
+  }
+  if(!$selfEntry){Resume-WidgetSupervisor $AppDir}
+  if(!$selfEntry){Start-ScheduledTask -TaskName $info.TaskName -TaskPath $info.TaskPath -ErrorAction Stop}
+  return $info
 }
 
 function Stop-WidgetSupervisorTask {
@@ -235,11 +386,9 @@ function Stop-WidgetSupervisorTask {
   # Task state alone does not prove its child PowerShell has exited.
   $expectedScript='"'+(Join-Path $info.AppDir 'runtime\supervisor.ps1')+'"'
   $stableScript='"'+(Join-Path $info.AgentDir 'update-agent.ps1')+'"'
-  $self=$null
-  if($info.WorkingDirectory-ine $info.AppDir){$self=Get-CimInstance Win32_Process -Filter ('ProcessId='+$PID) -ErrorAction Stop}
   # Logon recovery runs inside the scheduled entry before its supervisor loop.
   # It must not terminate its own task while re-registering the recovered plugin.
-  $recoveringEntry=$self -and [string]$self.CommandLine -and $self.CommandLine.IndexOf($stableScript,[StringComparison]::OrdinalIgnoreCase)-ge 0 -and $self.CommandLine-match '\s-Supervisor(?:\s|$)'
+  $recoveringEntry=Test-WidgetSupervisorCurrentEntry $info
   $processes=@(Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" -ErrorAction Stop|Where-Object{
     $_.ProcessId-ne $PID -and [string]$_.CommandLine -and ($_.CommandLine.IndexOf($expectedScript,[StringComparison]::OrdinalIgnoreCase)-ge 0 -or ($info.WorkingDirectory-ine $info.AppDir -and $_.CommandLine.IndexOf($stableScript,[StringComparison]::OrdinalIgnoreCase)-ge 0))
   })

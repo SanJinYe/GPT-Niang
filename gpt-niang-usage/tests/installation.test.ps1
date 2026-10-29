@@ -158,6 +158,8 @@ try{
   $global:widgetInstallerTestProcessMode='delayed'
   function Get-CimInstance {
     param($ClassName,[string]$Filter)
+    # The test host is not the supervisor entry; keep self-entry detection false.
+    if($Filter-eq ('ProcessId='+$PID)){return $null}
     if($Filter.StartsWith('Name=')){return $global:widgetInstallerTestSnapshot}
     $global:widgetInstallerTestPolls++
     if($global:widgetInstallerTestProcessMode-eq 'delayed'){
