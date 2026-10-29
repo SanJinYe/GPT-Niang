@@ -4,14 +4,14 @@
 
 气泡直接显示每个来源的数据，不再显示“打开用量查询”中间页。查询在设置窗口关闭时仍可完成，查询中暂缓收起，完成后恢复 5 秒显示。失败、过期及未配置状态不会显示成 0。
 
-OpenRouter 的 `/api/v1/credits` 使用管理密钥，`/api/v1/key` 使用当前业务 API key；设置分别保存两者的环境变量名。展示 credit 剩余（total_credits − total_usage）、当前 key 上限及剩余，null 上限明确显示未设限额，0 保持为 0。两个请求独立，某一项失败不遮掉另一项结果。[官方 credit 接口](https://openrouter.ai/docs/api/api-reference/credits/get-remaining-credits)、[当前 key 接口](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key)。
+OpenRouter 的 `/api/v1/credits` 使用管理密钥，`/api/v1/key` 使用当前业务 API key；设置分别保存两者的加密凭据，也兼容环境变量方式。展示当前 key 上限、消耗进度条和 credit 总余额（total_credits − total_usage），null 上限明确显示未设限额，0 保持为 0。两个请求独立，某一项失败不遮掉另一项结果。[官方 credit 接口](https://openrouter.ai/docs/api/api-reference/credits/get-remaining-credits)、[当前 key 接口](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key)。
 
 Claude API 来源沿用官方组织用量查询；普通 API 账户余额未有本实现支持的公开查询接口，气泡明确显示“剩余额度：接口未提供”，不将 token 用量当剩余额度。Enterprise 成员 Spend Limits 属于不同产品，不用于替代 API 账户余额。
 
 ## 音乐
 
 - 网易云、QQ 音乐、Spotify 分别勾选；自动跟随总开关开启时，已勾选播放器播放才启动律动。手动律动暂停自动跟随，保留来源选择。
-- 第三次点击时播放中的已勾选歌曲显示歌词并常驻，暂停后恢复台词。无进度、无歌词、匹配失败会明确提示。
+- 点击进入所有额度来源之后的台词页时，播放中的已勾选歌曲显示歌词并常驻，暂停后恢复台词。具体点击次数随启用来源数量变化；无进度、无歌词、匹配失败会明确提示。
 - 网易云沿用本地桌面 MCP；QQ 音乐和 Spotify 通过 Windows 媒体会话读取曲名、歌手、播放进度。客户端必须向 Windows 发布媒体信息；浏览器播放器、未发布媒体会话的客户端不保证识别。
 - 新工具 `desktop_music_get_now_playing` 接收 `providers` 数组。多个已勾选播放器同时播放时优先采用媒体时间线最近更新者；时间相同时按网易云、QQ 音乐、Spotify 排序。
 - QQ / Spotify 歌词匹配网易云曲库，仅接受唯一的同名同歌手结果，有时长时须在 3 秒误差内；不保证曲库覆盖。结果携带 `netease_match` 来源。不读取音乐账号凭据。
@@ -21,7 +21,7 @@ Claude API 来源沿用官方组织用量查询；普通 API 账户余额未有�
 
 Credit 来源（包括 OpenRouter、DeepSeek、硅基流动）在气泡与设置卡片中共用布局：当前 Key limit → 当前 key 消耗进度条 → 账户总余额。OpenRouter 有限额时按 limit − limit_remaining 计算当前窗口消耗，不使用累计 usage 代替当前窗口；未设限额时显示已用金额但不生成百分比。缺少 key 限额或消耗的接口显示“未提供”和灰色空条；账户余额单独保留，不混入 key 的进度。零限额不做除法，超限进度最多填满。
 
-设置默认打开用量页，按来源顺序展示已启用厂商及本机 token 卡片。添加／编辑厂商配置查询开关与密钥环境变量名；查询类型与地址由厂商确定。可添加 Ark、OpenRouter、OpenAI、Claude API、DeepSeek、硅基流动；Ark 直接复用现有连接。不支持查询的 Gemini 和自定义接口不在添加列表中。推理地址、接口类型、模型列表已移出设置界面。
+设置默认打开用量页，按来源顺序展示已启用厂商及本机 token 卡片。添加／编辑厂商配置查询开关，可直接粘贴密钥并保存；环境变量是可选兼容方式。查询类型与地址由厂商确定。可添加 Ark、OpenRouter、OpenAI、Claude API、DeepSeek、硅基流动；Ark 直接复用现有连接。不支持查询的 Gemini 和自定义接口不在添加列表中。推理地址、接口类型、模型列表已移出设置界面。
 
 本地统计与账户查询分开展示，不相加：
 
