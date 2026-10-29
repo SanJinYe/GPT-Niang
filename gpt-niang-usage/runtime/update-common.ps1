@@ -1,5 +1,6 @@
+. (Join-Path $PSScriptRoot 'storage-paths.ps1')
 function Get-WidgetUpdateAgentDir {
-  return (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'GPTNiangUsage\update-agent')
+  return (Join-Path (Get-WidgetStorageRoot) 'update-agent')
 }
 function Read-WidgetUpdateJson([string]$File) {
   if(Test-Path -LiteralPath $File){return (Get-Content -LiteralPath $File -Raw -Encoding UTF8|ConvertFrom-Json)}
@@ -81,7 +82,7 @@ function Install-WidgetUpdateAgent([string]$AppDir,[string]$DataDir) {
   $old=Read-WidgetUpdateJson (Join-Path $agentDir 'binding.json')
   if($old -and $old.appDir-ine $AppDir -and (Test-Path -LiteralPath $old.appDir)){throw 'Stable launcher belongs to an existing installation.'}
   $null=New-Item -ItemType Directory -Path $agentDir -Force
-  foreach($file in @('update-agent.ps1','update-helper.ps1','update-common.ps1','update-lock.ps1','supervisor-task.ps1','install-preflight.ps1','agent-launch.vbs','agent-supervisor.vbs')) {
+  foreach($file in @('storage-paths.ps1','update-agent.ps1','update-helper.ps1','update-common.ps1','update-lock.ps1','supervisor-task.ps1','install-preflight.ps1','agent-launch.vbs','agent-supervisor.vbs')) {
     $bytes=[IO.File]::ReadAllBytes((Join-Path $AppDir ('runtime\'+$file)))
     $target=Join-Path $agentDir $file
     # Keep a complete file visible to launchers, including during a failed upgrade.

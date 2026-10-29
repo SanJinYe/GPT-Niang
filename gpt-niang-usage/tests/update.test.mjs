@@ -146,7 +146,7 @@ test('real cleanup helper reclaims an interrupted cache and releases its claim b
   fs.mkdirSync(job,{recursive:true});fs.mkdirSync(options.agentDir,{recursive:true});
   fs.writeFileSync(path.join(job,'update-job.json'),JSON.stringify({schema:1,token,appDir:config.appDir,dataDir:config.dataDir}));
   fs.writeFileSync(path.join(job,'release.zip'),'interrupted');
-  for(const name of ['update-helper.ps1','update-common.ps1','supervisor-task.ps1','install-preflight.ps1']){
+  for(const name of ['storage-paths.ps1','update-helper.ps1','update-common.ps1','supervisor-task.ps1','install-preflight.ps1']){
     fs.copyFileSync(new URL('../runtime/'+name,import.meta.url),path.join(options.agentDir,name));
   }
   const executable=path.join(process.env.WINDIR,'System32','WindowsPowerShell','v1.0','powershell.exe');

@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'storage-paths.ps1')
 function Get-WidgetInstallationDataDir {
   param([Parameter(Mandatory=$true)][string]$AppDir,[Parameter(Mandatory=$true)]$Configuration)
   if(![string]$Configuration.appDir -or ![string]$Configuration.dataDir){throw 'Installation paths are missing.'}
@@ -39,7 +40,7 @@ function Test-WidgetStartupShortcutIdentity {
   param([Parameter(Mandatory=$true)]$Shortcut,[Parameter(Mandatory=$true)][string]$AppDir)
   $expectedExecute=Join-Path $env:WINDIR 'System32\wscript.exe'
   $expectedArguments='"'+(Join-Path ([IO.Path]::GetFullPath($AppDir)) 'launch.vbs')+'"'
-  $stable=if(Get-Command Get-WidgetUpdateAgentDir -ErrorAction SilentlyContinue){Get-WidgetUpdateAgentDir}else{Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'GPTNiangUsage\update-agent'}
+  $stable=if(Get-Command Get-WidgetUpdateAgentDir -ErrorAction SilentlyContinue){Get-WidgetUpdateAgentDir}else{Join-Path (Get-WidgetStorageRoot) 'update-agent'}
   $stableArguments='"'+(Join-Path $stable 'agent-launch.vbs')+'"'
   $argumentsMatch=[string]$Shortcut.Arguments-ieq $expectedArguments
   if([string]$Shortcut.Arguments-ieq $stableArguments){
@@ -104,7 +105,7 @@ function Get-WidgetSupervisorInfo {
   if([IO.Path]::GetFullPath([string]$config.appDir).TrimEnd('\')-ine $root){throw 'Supervisor installation identity mismatch.'}
   $data=[IO.Path]::GetFullPath([string]$config.dataDir)
   $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-  $agent=if(Get-Command Get-WidgetUpdateAgentDir -ErrorAction SilentlyContinue){Get-WidgetUpdateAgentDir}else{Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'GPTNiangUsage\update-agent'}
+  $agent=if(Get-Command Get-WidgetUpdateAgentDir -ErrorAction SilentlyContinue){Get-WidgetUpdateAgentDir}else{Join-Path (Get-WidgetStorageRoot) 'update-agent'}
   if($config.updateAgent -and [IO.Path]::GetFullPath($config.updateAgent)-ine $agent){throw 'Stable launcher path mismatch.'}
   $stable=[bool]$config.updateAgent
   [pscustomobject]@{AppDir=$root;DataDir=$data;Sid=$sid;TaskName=('GPT Niang Usage - '+$sid);TaskPath='\';Execute=(Join-Path $env:WINDIR 'System32\wscript.exe');Arguments=$(if($stable){'"'+(Join-Path $agent 'agent-supervisor.vbs')+'"'}else{'"'+(Join-Path $root 'supervisor.vbs')+'"'});WorkingDirectory=$(if($stable){$agent}else{$root});AgentDir=$agent}

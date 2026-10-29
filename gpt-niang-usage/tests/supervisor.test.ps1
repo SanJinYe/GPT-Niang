@@ -275,7 +275,7 @@ try{
   $guardData=Join-Path $testRoot 'guard-data'
   $guardRuntime=Join-Path $guardApp 'runtime'
   $null=New-Item -ItemType Directory -Path $guardRuntime,$guardData -Force
-  Copy-Item -LiteralPath (Join-Path $source 'runtime\start-supervisor.ps1'),(Join-Path $source 'runtime\supervisor-task.ps1') -Destination $guardRuntime
+  Copy-Item -LiteralPath (Join-Path $source 'runtime\start-supervisor.ps1'),(Join-Path $source 'runtime\supervisor-task.ps1'),(Join-Path $source 'runtime\storage-paths.ps1') -Destination $guardRuntime
   Write-WidgetSupervisorJson (Join-Path $guardApp 'installation.json') @{appDir=$guardApp;dataDir=$guardData}
   Write-WidgetSupervisorJson (Join-Path $guardData 'update-installing.json') @{token='fixture'}
   [IO.File]::WriteAllText((Join-Path $guardData 'supervisor-stop.flag'),'stop',[Text.UTF8Encoding]::new($false))
@@ -308,7 +308,7 @@ try{
   $loopData=Join-Path $testRoot 'loop-data'
   $loopRuntime=Join-Path $loopApp 'runtime'
   $null=New-Item -ItemType Directory -Path $loopRuntime,$loopData -Force
-  Copy-Item -LiteralPath (Join-Path $source 'runtime\supervisor-task.ps1') -Destination $loopRuntime
+  Copy-Item -LiteralPath (Join-Path $source 'runtime\supervisor-task.ps1'),(Join-Path $source 'runtime\storage-paths.ps1') -Destination $loopRuntime
   $loopText=[IO.File]::ReadAllText((Join-Path $source 'runtime\supervisor.ps1'))
   $loopText=$loopText.Replace('Local\GPTNiangSupervisor-',('Local\GPTNiangSupervisorTest-'+[Guid]::NewGuid().ToString('N')+'-'))
   [IO.File]::WriteAllText((Join-Path $loopRuntime 'supervisor.ps1'),$loopText,[Text.UTF8Encoding]::new($false))

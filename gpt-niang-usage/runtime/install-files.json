@@ -74,5 +74,7 @@
   "assets/CHARACTER-NOTICE.txt",
   "assets/dock-poses/top.png",
   "assets/dock-poses/top-left.png",
-  "assets/dock-poses/top-right.png"
+  "assets/dock-poses/top-right.png",
+  "runtime/storage-paths.ps1",
+  "runtime/migrate-storage.ps1"
 ]

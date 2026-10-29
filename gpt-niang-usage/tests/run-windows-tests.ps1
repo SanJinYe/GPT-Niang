@@ -36,6 +36,7 @@ $registered=@(
   'quota-selection.test.ps1',
   'installation.test.ps1',
   'supervisor.test.ps1',
+  'storage-paths.test.ps1',
   'update.test.ps1',
   'lifecycle.test.ps1',
   'entrypoint.test.ps1',

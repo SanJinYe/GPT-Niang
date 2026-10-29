@@ -6,7 +6,7 @@
 
 依赖一个支持 `usage` 命令的 `opencode-ark-handoff/handoff.py` 安装，以及同一账户的官方 Ark CLI 控制面登录。该外部工具不随本仓库分发。查询只读取套餐，不调用模型。
 
-在挂件数据目录（默认 `%LOCALAPPDATA%/GPTNiangUsage/state`）创建 `ark-connection.json`，用实际路径替换示例：
+在挂件数据目录（默认 `%USERPROFILE%/.gpt-niang/state`）创建 `ark-connection.json`，用实际路径替换示例：
 
 ```json
 {

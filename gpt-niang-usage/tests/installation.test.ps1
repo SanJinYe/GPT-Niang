@@ -18,7 +18,7 @@ try{
   $commonFile=Join-Path $moved 'runtime\update-common.ps1'
   $common=[IO.File]::ReadAllText($commonFile)
   $isolatedAgent=Join-Path $testRoot 'update-agent'
-  $common=$common.Replace("(Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'GPTNiangUsage\update-agent')",("'"+$isolatedAgent.Replace("'","''")+"'"))
+  $common=$common.Replace("(Join-Path (Get-WidgetStorageRoot) 'update-agent')",("'"+$isolatedAgent.Replace("'","''")+"'"))
   [IO.File]::WriteAllText($commonFile,$common,[Text.UTF8Encoding]::new($false))
   $old=Join-Path $testRoot 'original'
   $data=Join-Path $testRoot 'state'

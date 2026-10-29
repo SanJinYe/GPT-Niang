@@ -193,7 +193,7 @@ git pull --ff-only origin feature/local-companion-customizations
 - Codex 订阅额度通过现有登录状态只读查询，不创建聊天或调用模型。厂商查询只访问对应官方查询接口，不发送推理请求。
 - 直接粘贴的密钥使用 Windows 当前用户加密保护（DPAPI）保存在本机，编辑时不回显；后台查询通过一次性进程管道传递，不写入命令行或明文配置。旧环境变量方式仍在可选项中。
 - 本机 token 统计只提取计数字段，不把聊天正文上传给厂商。音乐匹配会把曲名、歌手发送给网易云歌词接口；磁盘音乐状态只保存当前歌词行，不保存完整歌词文件。
-- 配置、密钥密文、账户快照、歌词状态和运行日志不提交到 Git。默认数据目录是 `%LOCALAPPDATA%\GPTNiangUsage\state`，实际位置以安装配置为准。
+- 配置、密钥密文、账户快照、歌词状态和运行日志不提交到 Git。默认数据目录是 `%USERPROFILE%\.gpt-niang\state`，实际位置以安装配置为准。旧安装的 AppData 双副本问题与迁移方法见 [存储隔离说明](docs/storage-isolation.md)。
 
 ## 常见问题
 

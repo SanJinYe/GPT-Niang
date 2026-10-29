@@ -15,7 +15,7 @@ $testApp=Join-Path $testRoot 'app'
 $testData=Join-Path $testRoot 'state'
 
 # Use the shipping manifest so newly added runtime modules are exercised too.
-$files=@(Get-Content -LiteralPath (Join-Path $source 'runtime\install-files.json') -Raw -Encoding UTF8|ConvertFrom-Json)
+$files=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText((Join-Path $source 'runtime\install-files.json'),[Text.Encoding]::UTF8))
 
 $directories=@($testRoot,$testApp,$testData,(Join-Path $testApp 'runtime'),(Join-Path $testApp 'assets'),(Join-Path $testApp 'assets\characters'))
 
