@@ -29,6 +29,11 @@ Thumbs.db
 
 # Local references, runtime connection settings and Python caches
 .local/
+**/runtime-bin/
+**/providers.json
+**/provider-usage.json
+**/music-sources.json
+debug.log
 **/*-connection.json
 **/music-now-playing.json
 **/__pycache__/

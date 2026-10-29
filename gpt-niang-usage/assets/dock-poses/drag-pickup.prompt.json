@@ -1,0 +1,8 @@
+{
+  "tool": "built-in image_gen",
+  "reference": "../gpt-dragon-niang-bust.png",
+  "asset": "drag-pickup-sheet.png",
+  "layout": "2 columns x 2 rows, row-major order, equal cells, transparent RGBA",
+  "brief": "Same white/lavender dragon girl, mouthless half-lidded expression, full-body chibi picked up by a human hand pinching the BACK of her clothing. Four registered poses with alternating arm and leg movements. Keep horns, ears, knot ornament, clothing, pale skin and purple eyes. No text, visible grid, or backdrop.",
+  "playback": "8 fps while dragging; restore original sprite and alpha hit testing on release/capture loss"
+}
