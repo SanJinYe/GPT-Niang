@@ -8,11 +8,12 @@ import { DesktopAdapter } from './adapter.mjs';
 import { MusicController } from './controller.mjs';
 import { PlaylistController } from './playlists.mjs';
 import { LyricsReader } from './lyrics.mjs';
+import { DesktopMusic } from './desktop-music.mjs';
 
 export function createServer(controller, {
   beforeOperation = async () => {}, afterOperation = async () => {},
   onShutdown = () => {}, onDrained = async () => {},
-  playlists,
+  playlists,desktopMusic,
 } = {}) {
   const server = new McpServer({ name: 'netease-desktop-mcp', version: '0.1.0-alpha.4' });
   let queue = Promise.resolve();
@@ -28,7 +29,7 @@ export function createServer(controller, {
     return shutdownPromise;
   };
   server.server.onclose = () => { server.shutdown().catch(() => {}); };
-  const register = (name, description, schema, options, operation) => {
+  const register = (name, description, schema, options, operation, needsAdapter=true) => {
     server.registerTool(name, {
       title: name, description, inputSchema: z.object(schema).strict(),
       outputSchema: { result: z.record(z.string(), z.unknown()) },
@@ -38,8 +39,7 @@ export function createServer(controller, {
         let acquired = false;
         try {
           if (stopped) throw new Error('SERVER_CLOSED');
-          await beforeOperation();
-          acquired = true;
+          if(needsAdapter){await beforeOperation();acquired = true;}
           if (stopped) throw new Error('SERVER_CLOSED');
           const result = await operation(args);
           return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: { result } };
@@ -54,6 +54,7 @@ export function createServer(controller, {
     });
   };
   register('netease_get_status', 'Read the current visible song label, playback and heart state. null means unknown. trackKey hashes the visible title/artist, not a unique catalog ID; identical labels are indistinguishable.', {}, { readOnlyHint: true, idempotentHint: true }, () => controller.status());
+  register('desktop_music_get_now_playing','Read NetEase/QQ Music/Spotify playback. Only enabled playing sources trigger lyrics. QQ/Spotify use Windows media sessions; matched lyrics identify their NetEase source. Unknown/missing metadata is explicit.',{providers:z.array(z.enum(['netease','qqmusic','spotify'])).max(3).default(['netease','qqmusic','spotify'])},{readOnlyHint:true,idempotentHint:true},({providers})=>{if(!desktopMusic)throw new Error('DESKTOP_MUSIC_UNAVAILABLE');return desktopMusic.nowPlaying(providers);},false);
   register('netease_get_now_playing', 'Read current song, playback position and just the current timed lyric line. Lyrics are fetched from NetEase by the current song ID. No playback or account changes.', {}, { readOnlyHint: true, idempotentHint: true }, async () => {
     const before = await controller.nowPlaying();
     await lyrics.current(before);
@@ -102,10 +103,12 @@ export function closeOnInputEnd(input, server) {
 
 async function main() {
   const adapter = new DesktopAdapter();
-  const server = createServer(new MusicController(adapter), {
+  const controller=new MusicController(adapter),desktopMusic=new DesktopMusic({nowPlaying:async()=>{await adapter.beginOperation();try{return await controller.nowPlaying();}finally{await adapter.endOperation();}}});
+  const server = createServer(controller, {
+    desktopMusic,
     playlists: new PlaylistController(adapter, { enabled: process.env.NETEASE_ENABLE_PLAYLIST_DELETE === '1', createEnabled: process.env.NETEASE_ENABLE_PLAYLIST_CREATE === '1', protectedIds: (process.env.NETEASE_PROTECTED_PLAYLIST_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean) }),
     beforeOperation: () => adapter.beginOperation(), afterOperation: () => adapter.endOperation(),
-    onShutdown: () => adapter.stop(), onDrained: () => adapter.disconnect(),
+    onShutdown: () => {adapter.stop();desktopMusic.close();}, onDrained: () => adapter.disconnect(),
   });
   closeOnInputEnd(process.stdin, server);
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => {

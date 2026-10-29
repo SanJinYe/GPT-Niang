@@ -19,6 +19,8 @@
     "check": "node --check src/server.mjs"
   },
   "files": [
+    "widget-bridge.mjs",
+    "Connect-CloudMusic.cmd",
     "src",
     "scripts",
     "README.md",

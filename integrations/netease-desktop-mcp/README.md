@@ -1,5 +1,7 @@
 # netease-desktop-mcp
 
+本 fork 的挂件连接入口：双击 `Connect-CloudMusic.cmd`，以本机端口 9223 连接默认安装位置的网易云。若播放器已连接则不重启；若当前为普通启动、未开放控制端口，则会重启播放器并短暂中断播放。需要 PowerShell 7（`pwsh.exe`）。
+
 让 AI 通过本地 MCP 控制 Windows 网易云音乐客户端：查看当前歌曲、搜索点播、控制播放和切歌，以及给当前歌曲加红心。
 
 A local stdio MCP server for controlling the NetEase Cloud Music desktop app on Windows, using native WebSocket CDP without ChromeDriver or cookie extraction.

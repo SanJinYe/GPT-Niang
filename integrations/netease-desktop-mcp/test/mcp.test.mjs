@@ -187,7 +187,7 @@ test('real SDK stdio handshake, eleven tools, and structured tool failure', asyn
   t.after(() => client.close());
   await client.connect(transport);
   const listed = await client.listTools();
-  assert.equal(listed.tools.length, 11);
+  assert.equal(listed.tools.length, 12);
   assert.equal(listed.tools.find(t => t.name === 'netease_get_status').annotations.readOnlyHint, true);
   const result = await client.callTool({ name: 'netease_get_status', arguments: {} });
   assert.equal(result.isError, true);
