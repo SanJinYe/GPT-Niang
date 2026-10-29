@@ -189,8 +189,12 @@ function New-WidgetSupervisorTaskDefinition {
   param([Parameter(Mandatory=$true)]$Info)
   $action=New-ScheduledTaskAction -Execute $Info.Execute -Argument $Info.Arguments -WorkingDirectory $Info.WorkingDirectory
   $principal=New-ScheduledTaskPrincipal -UserId $Info.Sid -LogonType Interactive -RunLevel Limited
-  $trigger=New-ScheduledTaskTrigger -AtLogOn -User $Info.Sid
-  $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable -Hidden
+  $logonTrigger=New-ScheduledTaskTrigger -AtLogOn -User $Info.Sid
+  # An external trigger also recovers a supervisor killed with the launching app.
+  # IgnoreNew and the supervisor mutex keep normal operation single-instance.
+  $recoveryTrigger=New-ScheduledTaskTrigger -Once -At ([DateTime]::Now.AddMinutes(1)) -RepetitionInterval ([TimeSpan]::FromMinutes(1))
+  $trigger=@($logonTrigger,$recoveryTrigger)
+  $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable -Hidden -RestartCount 3 -RestartInterval ([TimeSpan]::FromMinutes(1))
   New-ScheduledTask -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description 'Keep the local GPT Niang widget attached to the current user Codex main window.'
 }
 
