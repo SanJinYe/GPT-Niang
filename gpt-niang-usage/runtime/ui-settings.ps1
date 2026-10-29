@@ -147,12 +147,11 @@ function Initialize-WidgetSettingsMenu {
   $script:settingsMenuUi.MusicEnabled=Add-SettingsAction '手动律动' {param($sender,$event)Set-WidgetManualMusic ([bool]$sender.IsChecked);$script:context.IsOpen=$false} -Checkable -ReturnItem
   $script:settingsMenuUi.MusicFollow=Add-SettingsAction '跟随已勾选播放器' {param($sender,$event)Set-WidgetMusicFollowNetease ([bool]$sender.IsChecked);Update-WidgetSettingsMenu} -Checkable -ReturnItem
   Add-SettingsAction '选择网易云 / QQ 音乐 / Spotify' {Open-WidgetSettings 0}
-  $script:settingsMenuUi.MusicHorizontal=Add-SettingsAction '左右移动' {param($sender,$event)Set-WidgetMusicHorizontal ([bool]$sender.IsChecked)} -Description '关闭后原地律动；仍可拖动角色调整位置' -Checkable -ReturnItem
-  $script:settingsMenuUi.MusicLights=Add-SettingsAction '迪灯与背景灯光' {param($sender,$event)Set-WidgetMusicLights ([bool]$sender.IsChecked)} -Description '关闭后只保留角色律动，下次仍记住选择' -Checkable -ReturnItem
+  $script:settingsMenuUi.MusicHorizontal=Add-SettingsAction '左右移动' {param($sender,$event)Set-WidgetMusicHorizontal ([bool]$sender.IsChecked)} -Checkable -ReturnItem
+  $script:settingsMenuUi.MusicLights=Add-SettingsAction '迪灯与背景灯光' {param($sender,$event)Set-WidgetMusicLights ([bool]$sender.IsChecked)} -Checkable -ReturnItem
   $script:settingsMenuUi.MusicTrack=Add-SettingsAction '等待网易云歌曲信息' {} -ReturnItem
   $script:settingsMenuUi.MusicTrack.IsEnabled=$false
   }
-  $script:settingsMenuUi.MusicEnabled.ToolTip='固定 100 BPM（每 0.6 秒一轮）的轻柔律动。拖到边框松手可吸附并继续律动；自由区域保留拖放效果。拿起时按设置的双倍概率决定人物是否变色。关闭后恢复原位置。'
   $script:settingsMenuUi.AutoQuotes=Add-SettingsSubmenu '自动语录' {
     $script:settingsMenuUi.AutoQuoteEnabled=Add-SettingsAction '开启自动语录' {param($sender,$event)Set-WidgetAutoQuoteSettings ([bool]$sender.IsChecked) $script:autoQuoteIntervalSeconds;Update-WidgetSettingsMenu} -Checkable -ReturnItem
     Add-SettingsDivider
@@ -166,8 +165,6 @@ function Initialize-WidgetSettingsMenu {
     Add-SettingsPanel $hint -Passive
   } -ReturnItem
   $script:settingsMenuUi.Completion=Add-SettingsAction '回答结束提醒' {param($sender,$event)Set-CompletionNotificationEnabled ([bool]$sender.IsChecked);Update-WidgetSettingsMenu} -Checkable -ReturnItem
-  $script:settingsMenuUi.Completion.ToolTip='回答结束后在当前位置提醒；后台时临时置顶，显示后恢复'
-  Add-SettingsDivider
   $script:settingsMenuUi.Display=Add-SettingsSubmenu '显示与位置' {
   $script:settingsMenuUi.Follow=Add-SettingsAction '仅在 Codex 窗口内' {Set-WidgetFollowHost $true;Update-WidgetSettingsMenu;Set-WidgetMenuBounds;Position-WidgetMenuToHost} -Checkable -ReturnItem
   $script:settingsMenuUi.Follow.Uid='radio'
@@ -187,6 +184,11 @@ function Initialize-WidgetSettingsMenu {
   } -ReturnItem
   Add-SettingsDivider
   $exit=Add-SettingsAction '退出 GPT 娘' {Exit-WidgetForSession} -ReturnItem;$exit.Foreground=[Windows.Media.BrushConverter]::new().ConvertFromString('#A1788D')
+  # Keep these controls for the floating settings page, never as context entries.
+  # The menu must have the same contents before and after that page is created.
+  foreach($id in @('Appearance','Audio','AutoQuotes','Display','Updates')){
+    $script:context.Items.Remove($script:settingsMenuUi[$id])
+  }
   $script:context.Add_Opened({Pause-CompletionNotification;Reset-WidgetAutoQuoteSchedule;Update-WidgetSettingsMenu;Set-WidgetMenuBounds;Position-WidgetMenuToHost})
   $script:context.Add_Closed({Reset-WidgetAutoQuoteSchedule;Set-WidgetSizePreview $false})
   Initialize-SettingsMenuDismiss

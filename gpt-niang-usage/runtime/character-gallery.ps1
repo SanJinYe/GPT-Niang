@@ -169,7 +169,7 @@ function Open-WidgetCharacterGallery {
    </ScrollViewer>
    <StackPanel Grid.Row="2" Margin="0,12,4,0">
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <TextBlock x:Name="CharacterFeedback" Foreground="#745A98" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" Text="添加新形象时，推荐使用透明背景PNG"/>
+     <TextBlock x:Name="CharacterFeedback" Foreground="#745A98" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
      <Button x:Name="UndoRemoval" Grid.Column="1" Content="撤销移除" Style="{StaticResource GalleryButton}" Visibility="Collapsed" Margin="10,0,0,0"/>
     </Grid>
    </StackPanel>

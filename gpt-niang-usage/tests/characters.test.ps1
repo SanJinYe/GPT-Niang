@@ -256,7 +256,7 @@ try{
   Assert-Equal $closeButton.Content.Data.GetFlattenedPathGeometry().Figures.Count 2 'Close vector contains two crossing lines'
   Assert-Equal ($null-eq $script:characterGallery.FindName('ImportCharacter')) $true 'Title area has no separate import button'
   Assert-Equal $script:characterGallery.FindName('TitleDragArea').Child.Text '选择你喜欢的形象' 'Title area has no old subtitle'
-  Assert-Equal $script:characterGallery.FindName('CharacterFeedback').Text '添加新形象时，推荐使用透明背景PNG' 'Footer uses the requested exact hint'
+  Assert-Equal $script:characterGallery.FindName('CharacterFeedback').Text '' 'Footer stays empty until a functional status or error is available'
   Assert-Equal ($null-ne $script:characterGallery.FindName('TitleDragArea')) $true 'Gallery exposes a draggable title area'
   $scrollStyle=$script:characterGallery.Resources[[Windows.Controls.Primitives.ScrollBar]]
   Assert-Equal @($scrollStyle.Setters|Where-Object{$_.Property.Name-eq 'Width'})[0].Value 8 'Gallery scrollbar is a custom thin track'
