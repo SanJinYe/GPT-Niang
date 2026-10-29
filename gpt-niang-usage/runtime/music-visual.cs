@@ -106,7 +106,7 @@ public sealed class GptMusicMotion {
         Y=Floor;Vy=0;
         if(Phase==1){Props=Math.Min(1,(Time-landed)/.25);MoveAir(dt,throwMomentum?.75:10);Spring(ref Bend,ref BendSpeed,0,dt,20,.67);if(Props>=1)Phase=2;return;}
         double oldBend=Bend;
-        locked=locked&&period>=.28&&period<=1.0;
+        locked=locked&&period>=.28&&period<=2.0;
         if(locked){
             if(!wasLocked){Cycle=phase;lockStartPose=Bend;Energy=0;}
             else{double predicted=Cycle+clockElapsed/period,error=phase-predicted;error-=Math.Round(error);
@@ -146,11 +146,16 @@ public sealed class GptMusicMotion {
 // No PowerShell callbacks run on these animation or capture frames. Native
 // movement is delegated to the existing follower's single position writer.
 public sealed class GptMusicVisual : IDisposable {
+    public const double RhythmPeriodSeconds=.6;
+    public const double RhythmAmplitude=.45;
+    public const double NoteSizeDip=13;
+    double fixedClock;
     readonly Window window;readonly Image girl;readonly FrameworkElement bubble;readonly Canvas root;
     readonly DispatcherTimer wake;
     DispatcherOperation pendingPosition;
     readonly Action<int,int> followOffset;readonly GptMusicCapture capture;
     readonly MusicArt under,over;readonly ScaleTransform press=new ScaleTransform();readonly Color[] palette;
+    readonly MatrixTransform dockBeat=new MatrixTransform();
     readonly Transform oldTransform;readonly Point oldOrigin;readonly bool glasses;
     readonly FrameworkElement menuButton;double menuLeft,menuTop;
     double baseLeft,baseTop,normalX,normalY,relativeX,bottomDistance,dpi=1,figurePhysical,anchorX,anchorY,lastFrame,colorTime,artTime,lastLightPaint,grabX,grabY,lastGrabAt;
@@ -161,6 +166,53 @@ public sealed class GptMusicVisual : IDisposable {
     public bool Enabled {get;private set;}
     public bool ColorEnabled {get;set;}
     public bool AllowLyricsBubble {get;set;}
+    public bool SideDock {get;set;}
+    public bool TopDock {get;set;}
+    public string DockPose {get;set;}
+    bool pinned;
+    public bool Pinned {get{return pinned;}set{
+        pinned=value;
+        girl.RenderTransform=value?(Transform)dockBeat:press;
+        if(value){CancelPendingPosition();Canvas.SetLeft(girl,baseLeft);Canvas.SetTop(girl,baseTop);RefreshLayout();if(Motion!=null){Motion.Phase=2;Motion.Props=0;}}
+    }}
+    public void SetDockAnchor(double x,double y){
+        if(!Pinned)return;
+        var source=(BitmapSource)girl.Source;
+        double width=girl.ActualWidth>0?girl.ActualWidth:girl.Width,height=girl.ActualHeight>0?girl.ActualHeight:girl.Height;
+        double fit=Math.Min(width/source.PixelWidth,height/source.PixelHeight);
+        press.CenterX=(width-source.PixelWidth*fit)/2+source.PixelWidth*fit*x;
+        press.CenterY=(height-source.PixelHeight*fit)/2+source.PixelHeight*fit*y;
+        // RenderTransform follows LayoutTransform; compensate the anti-mirror used by dock art.
+        var layoutBounds=girl.LayoutTransform.TransformBounds(new Rect(0,0,width,height));
+        var pivot=girl.LayoutTransform.Transform(new Point(press.CenterX,press.CenterY));
+        press.CenterX=pivot.X-layoutBounds.Left;press.CenterY=pivot.Y-layoutBounds.Top;
+        UpdateBeatPose();
+    }
+    public static Matrix DockBeatMatrix(bool side,double bend,double rock,double x,double y){
+        return DockBeatMatrix(side,false,bend,rock,x,y);
+    }
+    public static Matrix DockBeatMatrix(bool side,bool top,double bend,double rock,double x,double y){
+        bend=GptMusicMotion.Clamp(bend,-.25,.5);
+        bend*=RhythmAmplitude;rock*=RhythmAmplitude;
+        if(top){
+            // Horizontal shear: both hands and the entire top edge stay fixed.
+            double shear=Math.Tan(GptMusicMotion.Clamp(rock,-7.5,7.5)*.9*Math.PI/180);
+            return new Matrix(1,0,shear,1,-y*shear,0);
+        }
+        if(side){
+            // Horizontal peek plus nod: every point on the vertical grip line stays fixed.
+            double sx=1-bend*.5,shear=Math.Tan(GptMusicMotion.Clamp(rock,-7.5,7.5)*.35*Math.PI/180);
+            return new Matrix(sx,shear,0,1,x*(1-sx),-x*shear);
+        }
+        // The two corner edges remain axis-aligned while the face bounces diagonally.
+        double scaleX=1-bend*.45,scaleY=1-bend*.65;
+        return new Matrix(scaleX,0,0,scaleY,x*(1-scaleX),y*(1-scaleY));
+    }
+    void UpdateBeatPose(){
+        if(Pinned){
+            dockBeat.Matrix=DockBeatMatrix(SideDock,TopDock,Motion==null?0:Motion.Bend,Motion==null?0:Motion.Rock,press.CenterX,press.CenterY);
+        }else{press.ScaleX=1;press.ScaleY=1-(Motion==null?0:Motion.Bend)*RhythmAmplitude;}
+    }
     bool horizontalTravelEnabled=true;
     public bool HorizontalTravelEnabled {get{return horizontalTravelEnabled;}set{
         horizontalTravelEnabled=value;
@@ -224,10 +276,10 @@ public sealed class GptMusicVisual : IDisposable {
     void Wake(object sender,EventArgs e){if(Enabled&&!disposed&&visible&&window.IsVisible&&GptMusicCapture.NowMs-lastFrame>=32)Frame(sender,e);}
     public void RefreshLayout() {
         var source=(BitmapSource)girl.Source;alpha=AlphaBounds(source,girl.Width,girl.Height);
-        double left=175-(alpha.Left+alpha.Width/2),top=350-alpha.Bottom;
+        double left=Pinned?Canvas.GetLeft(girl):175-(alpha.Left+alpha.Width/2),top=Pinned?Canvas.GetTop(girl):350-alpha.Bottom;
         Canvas.SetLeft(girl,left);Canvas.SetTop(girl,top);girl.RenderTransformOrigin=new Point(0,0);
         if(menuButton!=null){Canvas.SetLeft(menuButton,menuLeft+left-baseLeft);Canvas.SetTop(menuButton,menuTop+top-baseTop);}
-        press.CenterX=alpha.Left+alpha.Width/2;press.CenterY=alpha.Bottom;girl.RenderTransform=press;
+        press.CenterX=alpha.Left+alpha.Width/2;press.CenterY=alpha.Bottom;girl.RenderTransform=Pinned?(Transform)dockBeat:press;
         imageRect=new Rect(left,top,girl.Width,girl.Height);
         window.UpdateLayout();MeasureAnchor();under.InvalidateVisual();over.InvalidateVisual();
     }
@@ -248,7 +300,8 @@ public sealed class GptMusicVisual : IDisposable {
             Motion.HorizontalTravelEnabled=horizontalTravelEnabled;
             Motion.FigureHeight=figurePhysical*alpha.Height/alpha.Width;
             int px=(int)Math.Round(initialFoot.X-anchorX),py=(int)Math.Round(initialFoot.Y-anchorY);
-            if(follow)followOffset((int)Math.Round(px-(frame.Left+relativeX)),(int)Math.Round(py-(frame.Bottom-bottomDistance)));
+            if(Pinned){Motion.Phase=2;Motion.Props=0;}
+            else if(follow)followOffset((int)Math.Round(px-(frame.Left+relativeX)),(int)Math.Round(py-(frame.Bottom-bottomDistance)));
             else MusicNative.SetWindowPos(widget,IntPtr.Zero,px,py,0,0,0x615);
         }else if(Motion!=null&&allowed&&(Math.Abs(Motion.Width-frame.Width)>.5||Math.Abs(Motion.Floor-frame.Height)>.5||Math.Abs(Motion.FigureWidth-figurePhysical)>.5))
             Motion.Resize(frame.Width,frame.Height,figurePhysical,dpi);
@@ -270,6 +323,7 @@ public sealed class GptMusicVisual : IDisposable {
         return blocked||(window.ContextMenu!=null&&window.ContextMenu.IsOpen)||(!held&&!flying&&(girl.IsMouseCaptured||(bubble!=null&&bubble.Visibility==Visibility.Visible&&!AllowLyricsBubble)));
     }
     void ApplyPosition() {
+        if(Pinned)return;
         if(disposed||!Enabled||Paused||Motion==null||!visible||!allowed||!window.IsVisible||InteractionBlocked())return;
         // Resolve the latest host frame and motion at delivery, so a host move,
         // resize or drag cannot leave a queued absolute position behind.
@@ -299,20 +353,21 @@ public sealed class GptMusicVisual : IDisposable {
             bool held=Motion!=null&&Motion.Held;
             bool interaction=InteractionBlocked();
             Paused=!visible||!allowed||interaction||!window.IsVisible;
-            bool locked=Audio.RhythmLocked&&Audio.PeriodMs>0;
-            double phase=locked?1+(now-Audio.NextBeatAtMs)/Audio.PeriodMs:0;
+            if(!Paused&&!held)fixedClock+=dt;
+            bool locked=!Paused;
+            double phase=fixedClock/RhythmPeriodSeconds;
             if(Motion==null)return;
             var frame=FrameBounds();if(frame.Width<=0||frame.Height<=0)return;
             if(Math.Abs(Motion.Width-frame.Width)>.5||Math.Abs(Motion.Floor-frame.Height)>.5)Motion.Resize(frame.Width,frame.Height,figurePhysical,dpi);
             if(held&&!Paused&&girl.IsMouseCaptured)TrackPointer(frame,now);
             bool changed=Motion.Moving||locked||wasPaused!=Paused;
-            Motion.Step(dt,Paused,locked,phase,Audio.PeriodMs/1000,1,elapsed);
-            if(!Paused&&!locked&&Audio.SourceProcessId!=0&&Audio.Sequence>0)Motion.RespondToOnset((now-Audio.BeatAtMs)/1000,Audio.Strength);
-            press.ScaleX=1;press.ScaleY=1-Motion.Bend;
+            if(Pinned){Motion.Phase=2;Motion.Props=0;Motion.HorizontalTravelEnabled=false;}
+            Motion.Step(dt,Paused,locked,phase,RhythmPeriodSeconds,1,dt);
+            UpdateBeatPose();
             if(Motion.Props>=1)appearanceReady=true;
             if(!Paused) {
                 if(Motion.Energy>.005||Motion.Pulse>.005){double flow=.3+.7*Motion.Energy;artTime+=dt*flow;if(ColorEnabled)colorTime+=dt*flow;changed=true;}
-                RequestPosition();
+                if(!Pinned)RequestPosition();
             }
             if(changed){under.InvalidateVisual();over.InvalidateVisual();}
             PositionLamp(frame,visible&&allowed&&window.IsVisible,changed);wasPaused=Paused;
@@ -385,10 +440,12 @@ public sealed class GptMusicVisual : IDisposable {
     static readonly Geometry Arms=Geometry.Parse("M -56,-8 Q -66,-11 -73,-8 M 53,-8 Q 62,-14 69,-19 M -11,-6 Q 0,-12 12,-6");
     static readonly LinearGradientBrush Lens=new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#171527"),(Color)ColorConverter.ConvertFromString("#343044"),90);
     void DrawUnder(DrawingContext dc) {
+        if(Motion!=null&&Motion.Held)return;
+        if(Pinned)return;
         double f=alpha.Width,p=Motion.Props;if(p<=0)return;
         dc.PushOpacity(p);var shadow=new SolidColorBrush(Color.FromArgb((byte)(24+Math.Max(0,Motion.Bend)*35),45,34,61));
         dc.DrawEllipse(shadow,null,new Point(175,351),f*(.325+.10*Math.Max(0,Motion.Bend)),3);
-        double rock=GptMusicMotion.Clamp(Motion.Rock,-7.5,7.5),other=GptMusicMotion.Clamp(-.94*(Motion.Rock-Motion.RockSpeed*.022),-7.5,7.5);
+        double rock=GptMusicMotion.Clamp(Motion.Rock*RhythmAmplitude,-7.5,7.5),other=GptMusicMotion.Clamp(-.94*(Motion.Rock-Motion.RockSpeed*.022)*RhythmAmplitude,-7.5,7.5);
         DrawSpeaker(dc,-f*.56,rock,f/132);DrawSpeaker(dc,f*.56,other,f/132);dc.Pop();
     }
     void DrawSpeaker(DrawingContext dc,double x,double angle,double scale) {
@@ -402,7 +459,9 @@ public sealed class GptMusicVisual : IDisposable {
         dc.DrawLine(new Pen(Trim,1),new Point(-13,-7),new Point(12,-7));dc.Pop();dc.Pop();dc.Pop();
     }
     void DrawOver(DrawingContext dc) {
-        double p=appearanceReady?1:Motion.Props;if(p<=0)return;dc.PushTransform(new ScaleTransform(1,1-Motion.Bend,175,350));dc.PushOpacity(p);
+        if(Motion!=null&&Motion.Held)return;
+        if(Pinned){DrawDockAccessories(dc);return;}
+        double p=appearanceReady?1:Motion.Props;if(p<=0)return;dc.PushTransform(new ScaleTransform(1,1-Motion.Bend*RhythmAmplitude,175,350));dc.PushOpacity(p);
         if(ColorEnabled) {
             var flow=new LinearGradientBrush();for(int i=0;i<palette.Length;i++)flow.GradientStops.Add(new GradientStop(palette[i],(double)i/(palette.Length-1)));
             flow.StartPoint=new Point(0,.5);flow.EndPoint=new Point(1,.5);flow.SpreadMethod=GradientSpreadMethod.Repeat;flow.RelativeTransform=new TranslateTransform(-(colorTime/2.6%1),0);
@@ -422,6 +481,69 @@ public sealed class GptMusicVisual : IDisposable {
         }
         dc.Pop();dc.Pop();
     }
+    static readonly Geometry Headband=Geometry.Parse("M -94,5 C -105,-155 105,-155 94,5");
+    static readonly Brush HeadphoneWhite=Brush("#fffdfb"),HeadphonePad=Brush("#ded9ec");
+    static readonly Pen HeadphoneOutline=new Pen(Brush("#8b7ca6"),10),HeadphoneInner=new Pen(HeadphoneWhite,6),HeadphoneRim=new Pen(Brush("#75638f"),2);
+    static readonly Brush[] NoteColors={Brush("#a981cf"),Brush("#d88faf"),Brush("#8ba8d4")};
+    public static Point[] AccessoryEyes(string pose){
+        switch(pose){
+            case "side-left":return new[]{new Point(.455,.615),new Point(.700,.515)};
+            case "side-right":return new[]{new Point(.275,.530),new Point(.530,.630)};
+            case "bottom-left":return new[]{new Point(.255,.490),new Point(.620,.690)};
+            case "bottom-right":return new[]{new Point(.450,.720),new Point(.770,.566)};
+            case "top-left":return new[]{new Point(.380,.205),new Point(.490,.495)};
+            case "top-right":return new[]{new Point(.610,.550),new Point(.740,.285)};
+            case "top":return new[]{new Point(.620,.279),new Point(.390,.264)};
+            default:return new[]{new Point(.39,.64),new Point(.64,.60)};
+        }
+    }
+    void DrawDockAccessories(DrawingContext dc){
+        if(!glasses)return;
+        var source=(BitmapSource)girl.Source;
+        // Reuse the complete image transform, including its layout anti-mirror and beat matrix.
+        dc.PushTransform(new MatrixTransform(VisualMatrix(girl,root)));
+        double width=girl.ActualWidth>0?girl.ActualWidth:girl.Width,height=girl.ActualHeight>0?girl.ActualHeight:girl.Height;
+        double fit=Math.Min(width/source.PixelWidth,height/source.PixelHeight);
+        dc.PushTransform(new TranslateTransform((width-source.PixelWidth*fit)/2,(height-source.PixelHeight*fit)/2));
+        dc.PushTransform(new ScaleTransform(fit,fit));
+        var eyes=AccessoryEyes(DockPose);Point e1=new Point(eyes[0].X*source.PixelWidth,eyes[0].Y*source.PixelHeight),e2=new Point(eyes[1].X*source.PixelWidth,eyes[1].Y*source.PixelHeight);
+        double dx=e2.X-e1.X,dy=e2.Y-e1.Y,span=Math.Sqrt(dx*dx+dy*dy),angle=Math.Atan2(dy,dx)*180/Math.PI;
+        dc.PushTransform(new TranslateTransform((e1.X+e2.X)/2,(e1.Y+e2.Y)/2));dc.PushTransform(new RotateTransform(angle));dc.PushTransform(new ScaleTransform(span/67,span/67));
+        if(SideDock){
+            dc.DrawGeometry(null,HeadphoneOutline,Headband);dc.DrawGeometry(null,HeadphoneInner,Headband);
+            foreach(double x in new[]{-107.0,82.0}){
+                dc.DrawRoundedRectangle(HeadphoneWhite,HeadphoneRim,new Rect(x,-12,25,52),10,10);
+                dc.DrawRoundedRectangle(HeadphonePad,null,new Rect(x+6,-5,13,38),6,6);
+            }
+        }
+        dc.DrawGeometry(null,Arm,Arms);dc.DrawGeometry(Lens,LensRim,LeftLens);dc.DrawGeometry(Lens,LensRim,RightLens);
+        dc.PushOpacity(.35);var shine=new Pen(Brush("#c4cfdf"),1.9);dc.DrawLine(shine,new Point(-47,-6),new Point(-34,-7));dc.DrawLine(shine,new Point(20,-5),new Point(29,-6));dc.Pop();
+        dc.Pop();dc.Pop();dc.Pop();
+        dc.Pop();dc.Pop();dc.Pop();
+        if(!SideDock&&!TopDock)DrawFloatingNotes(dc);
+    }
+    public static Matrix VisualMatrix(Visual from,Visual to){
+        var t=from.TransformToAncestor(to);Point o=t.Transform(new Point(0,0)),a=t.Transform(new Point(1,0)),b=t.Transform(new Point(0,1));
+        return new Matrix(a.X-o.X,a.Y-o.Y,b.X-o.X,b.Y-o.Y,o.X,o.Y);
+    }
+    void DrawFloatingNotes(DrawingContext dc){
+        var toWindow=VisualMatrix(root,window);if(!toWindow.HasInverse)return;toWindow.Invert();
+        dc.PushTransform(new MatrixTransform(toWindow));
+        var imageToWindow=girl.TransformToAncestor(window);
+        var source=(BitmapSource)girl.Source;double w=girl.ActualWidth,h=girl.ActualHeight,fit=Math.Min(w/source.PixelWidth,h/source.PixelHeight);
+        double imageW=source.PixelWidth*fit,imageH=source.PixelHeight*fit;
+            bool left=DockPose!=null&&DockPose.EndsWith("left",StringComparison.Ordinal),top=DockPose!=null&&DockPose.StartsWith("top-",StringComparison.Ordinal);
+            for(int i=0;i<3;i++){
+                double x=left?.70+i*.10:.25-i*.10,y=top?.70+i*.09:.04+i*.11;
+                var anchor=imageToWindow.Transform(new Point((w-imageW)/2+x*imageW,(h-imageH)/2+y*imageH));
+                double phase=2*Math.PI*fixedClock/RhythmPeriodSeconds+i*1.7,driftY=6*Math.Sin(phase),driftX=2*Math.Cos(phase);
+                dc.PushOpacity(.65+.35*Motion.Energy);dc.PushTransform(new TranslateTransform(anchor.X+driftX,anchor.Y+driftY));dc.PushTransform(new ScaleTransform(NoteSizeDip/100,NoteSizeDip/100));
+                var pen=new Pen(NoteColors[i],8);dc.DrawLine(pen,new Point(32,75),new Point(32,5));dc.DrawLine(pen,new Point(32,5),new Point(78,-5));dc.DrawLine(pen,new Point(78,-5),new Point(78,65));
+                dc.DrawEllipse(NoteColors[i],null,new Point(19,75),17,11);dc.DrawEllipse(NoteColors[i],null,new Point(65,65),17,11);
+                dc.Pop();dc.Pop();dc.Pop();
+            }
+        dc.Pop();
+    }
     sealed class MusicLamp : FrameworkElement {
         readonly GptMusicVisual owner;public double Diameter=56,Top=52;
         readonly Brush[] beams;readonly Brush halo,leftWash,rightWash;
@@ -439,7 +561,7 @@ public sealed class GptMusicVisual : IDisposable {
             double length=Math.Max(1,Height-Top),brightness=.62;
             dc.PushOpacity(brightness);dc.PushTransform(new TranslateTransform(Width/2,Top+44*scale));
             for(int i=0;i<3;i++){
-                double angle=(i-1)*38+14*Math.Sin(Math.PI*m.Cycle*.5+i*1.8)*m.Energy;
+                double angle=(i-1)*38+14*RhythmAmplitude*Math.Sin(Math.PI*m.Cycle*.5+i*1.8)*m.Energy;
                 dc.PushTransform(new RotateTransform(angle));dc.PushTransform(new ScaleTransform(length,length));
                 dc.DrawGeometry(beams[i],null,Fan);dc.Pop();dc.Pop();
             }
@@ -449,7 +571,7 @@ public sealed class GptMusicVisual : IDisposable {
         protected override void OnRender(DrawingContext dc) {
             var m=owner.Motion;if(m==null)return;double radius=Diameter/2,s=Diameter/56;
             DrawRoom(dc,m,s);
-            dc.PushOpacity(Math.Max(.3,m.Props));dc.PushTransform(new TranslateTransform(Width/2,Top));dc.PushTransform(new RotateTransform(m.Lamp));dc.PushTransform(new ScaleTransform(s,s));
+            dc.PushOpacity(Math.Max(.3,m.Props));dc.PushTransform(new TranslateTransform(Width/2,Top));dc.PushTransform(new RotateTransform(m.Lamp*RhythmAmplitude));dc.PushTransform(new ScaleTransform(s,s));
             dc.DrawLine(new Pen(Brush("#aaa0b1"),1),new Point(0,0),new Point(0,16));dc.PushTransform(new TranslateTransform(0,44));
             dc.DrawEllipse(Shell,null,new Point(0,0),28,28);dc.PushClip(new EllipseGeometry(new Point(0,0),28,28));
             double phase=(owner.artTime*4)%5-2.5;

@@ -1,5 +1,9 @@
 param([string]$TestRoot=$PSScriptRoot,[string]$WidgetSource)
 $ErrorActionPreference='Stop'
+# Isolate existing geometry/lifecycle tests from the independently tested pickup sprite.
+function Start-WidgetPickup {return $false}
+function Stop-WidgetPickup {}
+
 if(!$WidgetSource){$WidgetSource=Join-Path (Split-Path $TestRoot -Parent) 'widget.ps1'}
 . (Join-Path (Split-Path $WidgetSource -Parent) 'runtime\quotes.ps1')
 Initialize-WidgetAutoQuoteSettings $null

@@ -79,7 +79,7 @@ function Save-WidgetQuotes([string]$DataDir,$Quotes) {
   $temp=$file+'.'+$PID+'.tmp'
   try{
     $json=@{version=1;quotes=@($rows)} | ConvertTo-Json -Depth 5
-    [IO.File]::WriteAllText($temp,$json,[Text.UTF8Encoding]::new($true))
+    [IO.File]::WriteAllText($temp,$json,[Text.UTF8Encoding]::new($false))
     if([IO.File]::Exists($file)){[IO.File]::Replace($temp,$file,($file+'.bak'),$true)}else{[IO.File]::Move($temp,$file)}
   }finally{if([IO.File]::Exists($temp)){[IO.File]::Delete($temp)}}
   Get-WidgetQuoteSettings $DataDir

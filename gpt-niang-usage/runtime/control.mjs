@@ -10,7 +10,7 @@ const command=process.argv[2]??'status';
 if(command==='query'){
   const result=await requestRefresh(config,configPath);
   console.log(JSON.stringify(result));process.exitCode=result.queryOk && result.ok?0:1;
-}else if(command==='show' || command==='quote' || command==='menu' || command==='characters' || command==='close-menu' || command==='music-on' || command==='music-off'){
+}else if(command==='show' || command==='quote' || command==='menu' || command==='settings' || command==='characters' || command==='close-menu' || command==='music-on' || command==='music-off'){
   atomicJson(path.join(config.dataDir,'display-request.json'),{mode:command==='show'?'quota':command,at:Date.now(),nonce:crypto.randomUUID()});
   console.log('已请求显示'+(command==='show'?'额度':command==='quote'?'语录':command==='characters'?'形象图库':'设置'));
 }else if(command==='stop'){

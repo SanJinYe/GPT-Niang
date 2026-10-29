@@ -1,5 +1,9 @@
-﻿param([string]$TestRoot=$PSScriptRoot)
+param([string]$TestRoot=$PSScriptRoot)
 $ErrorActionPreference='Stop'
+# Isolate existing geometry/lifecycle tests from the independently tested pickup sprite.
+function Start-WidgetPickup {return $false}
+function Stop-WidgetPickup {}
+
 Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
 $appDir=Split-Path $TestRoot -Parent
 $sourceAppDir=$appDir

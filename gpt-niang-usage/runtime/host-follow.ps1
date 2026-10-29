@@ -6,6 +6,9 @@ using System.Runtime.InteropServices;
 // Keep movement in the native event callback. Calling PowerShell or waiting for
 // a DispatcherTimer here makes a separate transparent window trail its host.
 public sealed class GptWidgetHostFollower : IDisposable {
+ public bool AllowOutsideHost {get;set;}
+ public bool AnchorTop {get;set;}
+ public int TopOffset {get;set;}
  [StructLayout(LayoutKind.Sequential)] struct Rect {public int Left,Top,Right,Bottom;}
  [StructLayout(LayoutKind.Sequential)] struct MonitorInfo {public int Size;public Rect Monitor,Work;public uint Flags;}
  [StructLayout(LayoutKind.Sequential)] struct Point {public int X,Y;}
@@ -138,17 +141,18 @@ public sealed class GptWidgetHostFollower : IDisposable {
     SetWindowPos(companion,IntPtr.Zero,cx,cy,0,0,0x215);
   }
   int px=anchor=="right"?frame.Right-width-right:frame.Left+left;
-  int py=frame.Bottom-height-bottom;
+  int py=AnchorTop?frame.Top+TopOffset:frame.Bottom-height-bottom;
   IntPtr monitor=MonitorFromPoint(new Point{X=px+temporaryX+width/2,Y=py+temporaryY+height/2},2);
   if(selectedMonitor!=IntPtr.Zero&&monitor!=selectedMonitor&&!LayoutDirty){LayoutDirty=true;if(LayoutRequested!=null)LayoutRequested();}
   selectedMonitor=monitor;
   // Position follows the full host frame. The work area only clips pixels.
   int x=px+temporaryX,y=py+temporaryY;
   var bounds=Clip(monitor,frame.Left,frame.Top,frame.Right,frame.Bottom);
-  int cl=Math.Max(0,Math.Max(frame.Left,bounds[0])-x);
-  int ct=Math.Max(0,Math.Max(frame.Top,bounds[1])-y);
-  int cr=Math.Min(width,Math.Min(frame.Right,bounds[2])-x);
-  int cb=Math.Min(height,Math.Min(frame.Bottom,bounds[3])-y);
+  if(AllowOutsideHost){var info=new MonitorInfo();info.Size=Marshal.SizeOf(typeof(MonitorInfo));if(GetMonitorInfo(monitor,ref info))bounds=new[]{info.Work.Left,info.Work.Top,info.Work.Right,info.Work.Bottom};}
+  int cl=Math.Max(0,(AllowOutsideHost?bounds[0]:Math.Max(frame.Left,bounds[0]))-x);
+  int ct=Math.Max(0,(AllowOutsideHost?bounds[1]:Math.Max(frame.Top,bounds[1]))-y);
+  int cr=Math.Min(width,(AllowOutsideHost?bounds[2]:Math.Min(frame.Right,bounds[2]))-x);
+  int cb=Math.Min(height,(AllowOutsideHost?bounds[3]:Math.Min(frame.Bottom,bounds[3]))-y);
   int cw=Math.Max(0,cr-cl),ch=Math.Max(0,cb-ct);
   if(cw==0||ch==0){cl=0;ct=0;cw=0;ch=0;}
   if(cl!=clipLeft||ct!=clipTop||cw!=clipWidth||ch!=clipHeight){

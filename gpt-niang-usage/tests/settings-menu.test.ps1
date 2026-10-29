@@ -68,7 +68,7 @@ try{
   Assert-Equal (Test-WidgetUpdateEditor) $true 'Open character gallery defers updater installation'
   $script:characterGallery=$null
   Assert-Equal (Test-WidgetUpdateEditor) $false 'Closed gallery returns to updater idle'
-  $expected=@('查看额度','刷新额度','换一句台词','更换形象','外观设置','声音与点击','编辑我的语录','音乐律动','自动语录','回答结束提醒','显示与位置','更新','退出 GPT 娘')
+  $expected=@('设置','查看额度','刷新额度','换一句台词','更换形象','外观设置','声音与点击','编辑我的语录','音乐律动','自动语录','回答结束提醒','显示与位置','更新','退出 GPT 娘')
   Assert-Equal $script:settingsMenuUi.MusicEnabled.IsChecked $false 'Music capture starts only after an explicit enable'
   Assert-Equal $script:settingsMenuUi.MusicEnabled.Items.Count 0 'Music is one direct toggle without a second mode'
   Assert-Equal ($null-eq $script:settingsMenuUi.MusicColor) $true 'Music color has no separate toggle'
@@ -191,8 +191,33 @@ try{
   $script:settingsMenuUi.Sound.IsChecked=$false
   $script:settingsMenuUi.Sound.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent))
   Assert-Equal $script:settingsMenuUi.Volume.IsEnabled $false 'Muted sound disables volume control'
+  . (Join-Path $appDir 'runtime/settings-window.ps1')
+  function Write-WidgetJson($Path,$Value){[IO.File]::WriteAllText($Path,($Value|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))}
+  $script:appDir=$appDir;$script:window.Show()
+  Open-WidgetSettings 2
+  Assert-Equal $script:settingsWindow.FindName('ExistingSettings').Children.Count 4 'Appearance settings remain inline'
+  Assert-Equal $script:settingsWindow.FindName('QuoteSettings').Children.Count 1 'Automatic quotes move into the quotes tab'
+  Assert-Equal $script:context.Items.Contains($script:settingsMenuUi.Appearance) $false 'Moved appearance section is not duplicated in the context menu'
+  Assert-Equal $script:settingsWindow.FindName('Tabs').SelectedIndex 2 'Appearance tab is selectable'
+  $soundControl=@($script:settingsControls|Where-Object{$_.Tag-eq $script:settingsMenuUi.Sound})[0]
+  $soundControl.IsChecked=$true;$soundControl.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+  Assert-Equal $script:soundOn $true 'Inline sound toggle invokes the original setting handler'
+  Open-QuoteEditor
+  Assert-Equal $script:settingsWindow.FindName('Tabs').SelectedIndex 3 'Old quote entry opens the embedded tab'
+  Assert-Equal ($null-eq $script:quoteEditor) $true 'No separate quote window is created'
+  $autoControl=@($script:settingsControls|Where-Object{$_.Tag-eq $script:settingsMenuUi.AutoQuoteEnabled})[0]
+  $autoControl.IsChecked=$true;$autoControl.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+  Assert-Equal $script:autoQuoteEnabled $true 'Embedded automatic quote toggle stays functional'
+  if($env:GPT_NIANG_TEST_PREVIEW){
+    [IO.Directory]::CreateDirectory($env:GPT_NIANG_TEST_PREVIEW)|Out-Null
+    $script:settingsWindow.UpdateLayout()
+    $frame=[Windows.Threading.DispatcherFrame]::new();$null=$script:settingsWindow.Dispatcher.BeginInvoke([Windows.Threading.DispatcherPriority]::Background,[Action]{$frame.Continue=$false});[Windows.Threading.Dispatcher]::PushFrame($frame)
+    $bitmap=[Windows.Media.Imaging.RenderTargetBitmap]::new(740,800,96,96,[Windows.Media.PixelFormats]::Pbgra32);$bitmap.Render($script:settingsWindow)
+    $png=[Windows.Media.Imaging.PngBitmapEncoder]::new();$png.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap));$stream=[IO.File]::Create((Join-Path $env:GPT_NIANG_TEST_PREVIEW 'appearance.png'));try{$png.Save($stream)}finally{$stream.Dispose()}
+  }
   Write-Output 'PASS: menu modes, conditional topmost, shared row styling, presets and sound controls'
 }finally{
+  $script:settingsShutdown=$true;if($script:settingsTimer){$script:settingsTimer.Stop()};if($script:settingsWindow){$script:settingsWindow.Close()}
   $poseWindow.Close()
   $script:window.Close()
   Assert-WidgetUpdateChildPath $script:dataDir ([IO.Path]::GetTempPath())

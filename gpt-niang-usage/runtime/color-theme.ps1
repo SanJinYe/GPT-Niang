@@ -189,7 +189,7 @@ function Initialize-WidgetColors {
   Set-WidgetColorPalette 'rainbow' -Immediate
   $mask=[Windows.Media.ImageBrush]::new($script:ui.Girl.Source)
   $mask.Stretch=[Windows.Media.Stretch]::Uniform
-  $root=$script:ui.Root;$girlIndex=$root.Children.IndexOf($script:ui.Girl)
+  $root=$script:ui.Girl.Parent;$girlIndex=$root.Children.IndexOf($script:ui.Girl)
   $halo=[Windows.Shapes.Rectangle]::new();$halo.Width=$script:ui.Girl.Width;$halo.Height=$script:ui.Girl.Height
   $halo.Fill=$script:widgetColors.brushes.accent;$halo.Opacity=0.62;$halo.OpacityMask=$mask
   $halo.IsHitTestVisible=$false;$halo.Effect=[Windows.Media.Effects.BlurEffect]::new();$halo.Effect.Radius=7
@@ -210,6 +210,7 @@ function Initialize-WidgetColors {
 }
 function Update-WidgetColorScene {
   if(!$script:widgetColors){return}
+  if($script:pickupState){$script:widgetColors.halo.Visibility='Collapsed';$script:widgetColors.tint.Visibility='Collapsed';return}
   if($script:widgetMusic -and $script:widgetMusic.Enabled){Restore-WidgetOriginalColors;return}
   $text=if($script:bubbleMode-eq 'quote'){[string]$script:ui.QuoteText.Tag}else{''}
   if(!$text -and $script:bubbleMode-eq 'quote'){$text=$script:ui.QuoteText.Text}

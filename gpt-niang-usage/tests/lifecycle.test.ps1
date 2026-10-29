@@ -1,5 +1,9 @@
 param([string]$TestRoot=$PSScriptRoot)
 $ErrorActionPreference='Stop'
+# Isolate existing geometry/lifecycle tests from the independently tested pickup sprite.
+function Start-WidgetPickup {return $false}
+function Stop-WidgetPickup {}
+
 $script:assertions=0
 function Assert-Lifecycle([bool]$Condition,[string]$Message){
   if(!$Condition){throw $Message}

@@ -1,52 +1,4 @@
-﻿function Open-QuoteEditor {
-  if($script:quoteEditor -and $script:quoteEditor.IsVisible){$script:quoteEditor.Activate()|Out-Null;return}
-  $editor=[Windows.Markup.XamlReader]::Parse(@'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="GPT 娘 · 我的语录" Width="540" Height="480" MinWidth="440" MinHeight="340" ShowInTaskbar="False"
- FontFamily="Microsoft YaHei UI" FontSize="14" Background="#FAF8FD" WindowStartupLocation="CenterScreen">
- <Grid Margin="22">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <TextBlock Margin="0,0,0,14" TextWrapping="Wrap" Foreground="#745A98" Text="一行一句语录。想让某句更常出现，可写：3 | 这句语录。"/>
-  <TextBox x:Name="Lines" Grid.Row="1" AcceptsReturn="True" AcceptsTab="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" FontSize="16" Padding="12" Background="White" BorderBrush="#DDD4EA"/>
-  <TextBlock x:Name="Feedback" Grid.Row="2" Margin="0,12,0,10" Foreground="#745A98" TextWrapping="Wrap"/>
-  <Grid Grid.Row="3">
-   <Button x:Name="Defaults" Content="恢复内置语录" Padding="12,6" HorizontalAlignment="Left"/>
-   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-    <Button x:Name="Save" Content="保存" Padding="20,6" Margin="0,0,10,0"/>
-    <Button x:Name="Done" Content="关闭" Padding="20,6"/>
-   </StackPanel>
-  </Grid>
- </Grid>
-</Window>
-'@)
-  $script:quoteEditor=$editor
-  $editor.Owner=$script:window
-  $lines=$editor.FindName('Lines');$feedback=$editor.FindName('Feedback')
-  $current=Get-WidgetQuoteSettings $script:dataDir
-  $lines.Text=($current.quotes|ForEach-Object{if($_.weight-eq 1){$_.text}else{([string]$_.weight)+' | '+$_.text}})-join [Environment]::NewLine
-  $feedback.Text=if($current.error){$current.error}else{'每条最多 200 字。语录在你的电脑上保存。'}
-  $editor.FindName('Save').Add_Click({
-    try{
-      $rows=@(foreach($line in ($script:quoteEditor.FindName('Lines').Text -split '\r?\n')){
-        $text=$line.Trim();if(!$text){continue}
-        if($text-match '^\s*(\d+(?:\.\d+)?)\s*\|\s*(.+)$'){@{text=$Matches[2].Trim();weight=[double]::Parse($Matches[1],[Globalization.CultureInfo]::InvariantCulture)}}
-        else{@{text=$text;weight=1}}
-      })
-      $saved=Save-WidgetQuotes $script:dataDir $rows
-      $script:quoteEditor.FindName('Feedback').Text="已保存 $($saved.quotes.Count) 句。下一次显示语录时就会使用。"
-    }catch{$script:quoteEditor.FindName('Feedback').Text=$_.Exception.Message}
-  })
-  $editor.FindName('Defaults').Add_Click({
-    try{
-      $restored=Reset-WidgetQuotes $script:dataDir
-      $script:quoteEditor.FindName('Lines').Text=($restored.quotes|ForEach-Object{$_.text})-join [Environment]::NewLine
-      $script:quoteEditor.FindName('Feedback').Text='已恢复内置语录，你的旧列表已备份。'
-    }catch{$script:quoteEditor.FindName('Feedback').Text=$_.Exception.Message}
-  })
-  $editor.FindName('Done').Add_Click({$script:quoteEditor.Close()})
-  $editor.Add_KeyDown({param($sender,$event)if($event.Key-eq [Windows.Input.Key]::Escape){$sender.Close();$event.Handled=$true}})
-  $editor.Show()
-}
+function Open-QuoteEditor {Open-WidgetSettings 3}
 
 function Initialize-WidgetSettingsMenu {
   $script:settingsMenuResources=[Windows.Markup.XamlReader]::Parse(@'
@@ -78,6 +30,7 @@ function Initialize-WidgetSettingsMenu {
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key="SettingsPreset" TargetType="Button">
+  <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
   <Setter Property="FontSize" Value="13"/><Setter Property="Foreground" Value="#75588E"/><Setter Property="Background" Value="#F2ECF8"/>
   <Setter Property="Padding" Value="8,6"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
@@ -113,6 +66,8 @@ function Initialize-WidgetSettingsMenu {
   $script:context.Template=[Windows.Markup.XamlReader]::Parse(@'
 <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="ContextMenu"><Border Background="#FFFCFF" BorderBrush="#DFD1EC" BorderThickness="1" CornerRadius="12" Padding="9,8"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False"><ItemsPresenter/></ScrollViewer></Border></ControlTemplate>
 '@)
+  Add-SettingsAction '设置' {Open-WidgetSettings}
+  $usageButton=$script:window.FindName('OpenUsageSettings');if($usageButton){$usageButton.Add_Click({param($s,$e)$e.Handled=$true;Open-WidgetSettings 1})}
   $script:settingsMenuUi.Bubble=Add-SettingsAction '查看额度' {if(!$script:collapsed -and $script:bubbleMode-eq 'quota'){Hide-Quota}else{Show-Quota}} -ReturnItem
   Add-SettingsAction '刷新额度' {Request-Refresh}
   $script:settingsMenuUi.Quote=Add-SettingsAction '换一句台词' {Show-Quote} -ReturnItem
@@ -190,13 +145,14 @@ function Initialize-WidgetSettingsMenu {
   Add-SettingsAction '编辑我的语录' {Open-QuoteEditor}
   Add-SettingsSubmenu '音乐律动' {
   $script:settingsMenuUi.MusicEnabled=Add-SettingsAction '手动律动' {param($sender,$event)Set-WidgetManualMusic ([bool]$sender.IsChecked);$script:context.IsOpen=$false} -Checkable -ReturnItem
-  $script:settingsMenuUi.MusicFollow=Add-SettingsAction '跟随网易云播放' {param($sender,$event)Set-WidgetMusicFollowNetease ([bool]$sender.IsChecked);Update-WidgetSettingsMenu} -Checkable -ReturnItem
+  $script:settingsMenuUi.MusicFollow=Add-SettingsAction '跟随已勾选播放器' {param($sender,$event)Set-WidgetMusicFollowNetease ([bool]$sender.IsChecked);Update-WidgetSettingsMenu} -Checkable -ReturnItem
+  Add-SettingsAction '选择网易云 / QQ 音乐 / Spotify' {Open-WidgetSettings 0}
   $script:settingsMenuUi.MusicHorizontal=Add-SettingsAction '左右移动' {param($sender,$event)Set-WidgetMusicHorizontal ([bool]$sender.IsChecked)} -Description '关闭后原地律动；仍可拖动角色调整位置' -Checkable -ReturnItem
   $script:settingsMenuUi.MusicLights=Add-SettingsAction '迪灯与背景灯光' {param($sender,$event)Set-WidgetMusicLights ([bool]$sender.IsChecked)} -Description '关闭后只保留角色律动，下次仍记住选择' -Checkable -ReturnItem
   $script:settingsMenuUi.MusicTrack=Add-SettingsAction '等待网易云歌曲信息' {} -ReturnItem
   $script:settingsMenuUi.MusicTrack.IsEnabled=$false
   }
-  $script:settingsMenuUi.MusicEnabled.ToolTip='先听几拍确认节奏，再跟拍。拿起时按设置的双倍概率决定人物是否变色；拖动后松手可甩出，碰边反弹、落地继续跟拍。关闭后恢复原位置。'
+  $script:settingsMenuUi.MusicEnabled.ToolTip='固定 100 BPM（每 0.6 秒一轮）的轻柔律动。拖到边框松手可吸附并继续律动；自由区域保留拖放效果。拿起时按设置的双倍概率决定人物是否变色。关闭后恢复原位置。'
   $script:settingsMenuUi.AutoQuotes=Add-SettingsSubmenu '自动语录' {
     $script:settingsMenuUi.AutoQuoteEnabled=Add-SettingsAction '开启自动语录' {param($sender,$event)Set-WidgetAutoQuoteSettings ([bool]$sender.IsChecked) $script:autoQuoteIntervalSeconds;Update-WidgetSettingsMenu} -Checkable -ReturnItem
     Add-SettingsDivider
@@ -220,7 +176,7 @@ function Initialize-WidgetSettingsMenu {
   $script:settingsMenuUi.TopmostDivider=Add-SettingsDivider -ReturnItem
   $script:settingsMenuUi.Topmost=Add-SettingsAction '始终置顶' {param($sender,$event)if($script:followHost){Update-WidgetSettingsMenu;return};$script:desktopTopmost=[bool]$sender.IsChecked;Save-Settings;Tick-Widget} -Checkable -ReturnItem
   Add-SettingsDivider
-  Add-SettingsAction '恢复右下角位置' {if($script:followHost){$script:offsetRight=0;$script:offsetLeft=0;$script:offsetBottom=0;$script:anchor='right'}else{$script:desktopLeft=$null;$script:desktopTop=$null};$script:side='right';$script:lastPosition=$null;Set-Facing;Hide-Quota;Save-Settings;Tick-Widget} -StayOpen
+  Add-SettingsAction '恢复右下角位置' {$script:dockMode='bottom-right';if($script:followHost){$script:offsetRight=0;$script:offsetLeft=0;$script:offsetBottom=0;$script:anchor='right'}else{$script:desktopLeft=$null;$script:desktopTop=$null};$script:side='right';$script:lastPosition=$null;Set-Facing;Hide-Quota;Save-Settings;Tick-Widget} -StayOpen
   } -ReturnItem
   $script:settingsMenuUi.Updates=Add-SettingsSubmenu '更新' {
     $script:settingsMenuUi.UpdateVersion=Add-SettingsAction '当前版本' {} -ReturnItem;$script:settingsMenuUi.UpdateVersion.IsEnabled=$false

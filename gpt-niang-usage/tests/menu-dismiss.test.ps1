@@ -1,5 +1,9 @@
 param([string]$ResultPath)
 $ErrorActionPreference='Stop'
+# Isolate existing geometry/lifecycle tests from the independently tested pickup sprite.
+function Start-WidgetPickup {return $false}
+function Stop-WidgetPickup {}
+
 Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase
 $appDir=Split-Path $PSScriptRoot -Parent
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $appDir 'runtime\ui-settings.ps1'),[Text.Encoding]::UTF8)))

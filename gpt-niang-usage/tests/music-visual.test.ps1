@@ -124,6 +124,28 @@ try{
  if($music.Paused){throw 'Persistent lyrics paused music animation'}
  $music.AllowLyricsBubble=$false;Pump 100
  if(!$music.Paused){throw 'Normal quota bubble no longer pauses interaction'}
+ $window.FindName('Bubble').Visibility='Collapsed';$music.Pinned=$true;$music.SetDockAnchor(.9,.74);Pump 100
+ $pinnedBefore=New-Object MusicVisualProbe+Rect;[MusicVisualProbe]::GetWindowRect($handle,[ref]$pinnedBefore)|Out-Null
+ $music.SideDock=$true;$music.Motion.Bend=.4;$music.Motion.Rock=7.5;$music.SetDockAnchor(.9,.74)
+ if($girl.RenderTransform.Value.M11-ge .95 -or $girl.RenderTransform.Value.M22-ne 1){throw 'Side dock renderer did not apply horizontal peek motion'}
+ $music.SideDock=$false;$music.SetDockAnchor(1,1)
+ if($girl.RenderTransform.Value.M22-ge .95){throw 'Corner renderer did not apply diagonal bounce'}
+ $savedLayout=$girl.LayoutTransform;$facing=$window.FindName('FacingScale');$savedFacing=$facing.ScaleX
+ foreach($direction in @(1.0,-1.0)){
+  $girl.LayoutTransform=[Windows.Media.ScaleTransform]::new($direction,1);$facing.ScaleX=$direction;$window.UpdateLayout()
+  foreach($sideDock in @($true,$false)){
+   $music.SideDock=$sideDock;$ax=if($sideDock){.9}else{1.0};$ay=if($sideDock){.74}else{1.0}
+   $fit=[Math]::Min($girl.Width/$girl.Source.PixelWidth,$girl.Height/$girl.Source.PixelHeight)
+   $anchorPoint=[Windows.Point]::new(($girl.Width-$girl.Source.PixelWidth*$fit)/2+$girl.Source.PixelWidth*$fit*$ax,($girl.Height-$girl.Source.PixelHeight*$fit)/2+$girl.Source.PixelHeight*$fit*$ay)
+   $music.Motion.Bend=0;$music.Motion.Rock=0;$music.SetDockAnchor($ax,$ay);$beforeAnchor=$girl.PointToScreen($anchorPoint)
+   $music.Motion.Bend=.4;$music.Motion.Rock=7.5;$music.SetDockAnchor($ax,$ay);$afterAnchor=$girl.PointToScreen($anchorPoint)
+   if([Math]::Abs($beforeAnchor.X-$afterAnchor.X)-gt .01 -or [Math]::Abs($beforeAnchor.Y-$afterAnchor.Y)-gt .01){throw ('Real WPF dock anchor moved: direction='+$direction+' side='+$sideDock+' dx='+($afterAnchor.X-$beforeAnchor.X)+' dy='+($afterAnchor.Y-$beforeAnchor.Y))}
+  }
+ }
+ $girl.LayoutTransform=$savedLayout;$facing.ScaleX=$savedFacing;$window.UpdateLayout()
+ $pinnedTime=$music.Motion.Time;Pump 250
+ $pinnedAfter=New-Object MusicVisualProbe+Rect;[MusicVisualProbe]::GetWindowRect($handle,[ref]$pinnedAfter)|Out-Null
+ if($pinnedAfter.Left-ne $pinnedBefore.Left -or $pinnedAfter.Top-ne $pinnedBefore.Top -or $music.Motion.Time-le $pinnedTime){throw 'Pinned dance moved the dock or stopped its beat clock'}
  $music.Stop($false);$after=New-Object MusicVisualProbe+Rect;[MusicVisualProbe]::GetWindowRect($handle,[ref]$after)|Out-Null
  if($after.Left-ne $rect.Left -or $after.Top-ne $rect.Top){throw 'Closing music did not restore the original native position'}
  if([Windows.Controls.Canvas]::GetLeft($girl)-ne $left -or [Windows.Controls.Canvas]::GetTop($girl)-ne $top -or $girl.RenderTransform-ne $transform){throw 'Normal character layout was not restored'}

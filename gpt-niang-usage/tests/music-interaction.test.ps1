@@ -1,5 +1,9 @@
 param([string]$ResultFile)
 $ErrorActionPreference='Stop'
+# Isolate existing geometry/lifecycle tests from the independently tested pickup sprite.
+function Start-WidgetPickup {return $false}
+function Stop-WidgetPickup {}
+
 $script:appDir=Split-Path $PSScriptRoot -Parent
 . ([ScriptBlock]::Create([IO.File]::ReadAllText((Join-Path $script:appDir 'runtime/music.ps1'),[Text.Encoding]::UTF8)))
 Initialize-WidgetMusicTypes

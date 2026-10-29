@@ -41,6 +41,10 @@
           <Button x:Name="Refresh" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Width="20" Height="16" Content="↻" FontSize="12" ToolTip="立即刷新额度"/>
         </Grid>
 <Grid>
+<StackPanel x:Name="UsagePanel" Visibility="Collapsed" Margin="0,5,0,0" IsHitTestVisible="False">
+ <TextBlock x:Name="ProviderQuotaText" Text="正在查询…" FontSize="12" LineHeight="17" TextWrapping="Wrap" TextAlignment="Center" Foreground="#745A98"/>
+ <ContentControl x:Name="CreditQuotaContent" Visibility="Collapsed" HorizontalContentAlignment="Stretch"/>
+</StackPanel>
 <StackPanel x:Name="CodexPanel">
         <StackPanel x:Name="ShortRow" Margin="0,1,0,0" IsHitTestVisible="False">
         <Grid Height="25">
@@ -103,8 +107,17 @@
     <Ellipse x:Name="TailNear" Canvas.Left="142" Canvas.Top="214" Width="17" Height="12" Fill="#FFFFFF" Stroke="#745A98" StrokeThickness="4" RenderTransformOrigin="0.5,0.5">
       <Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform>
     </Ellipse>
+    <Canvas x:Name="PoseLayer" Width="350" Height="350">
+      <Canvas.RenderTransform>
+        <TransformGroup>
+          <ScaleTransform x:Name="DockRevealScale"/>
+          <TranslateTransform x:Name="DockRevealMove"/>
+          <ScaleTransform x:Name="DockClickScale"/>
+        </TransformGroup>
+      </Canvas.RenderTransform>
     <Image x:Name="Girl" Canvas.Left="142" Canvas.Top="142" Width="208" Height="208" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" Cursor="Hand"
            ToolTip="连续点角色或气泡：Codex → Ark → 语句 → 收起；拖动调整位置；右键设置"/>
+    </Canvas>
     <Button x:Name="MenuButton" Canvas.Left="320" Canvas.Top="162" Width="24" Height="24"
             FontSize="15" Opacity="0" IsHitTestVisible="False" Background="#EDE7F6" ToolTip="挂件设置">
       <Viewbox Width="14" Height="14" Stretch="Uniform">
