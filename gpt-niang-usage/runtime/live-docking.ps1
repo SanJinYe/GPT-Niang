@@ -50,13 +50,17 @@ function Complete-WidgetPointerGesture($Cursor,[switch]$Cancel) {
 function Get-LivePickupBounds($Cursor,$Frame,[double]$Dpi) {
   $width=$script:drag.pickupWidth*$Dpi;$height=$script:drag.pickupHeight*$Dpi
   $left=$Cursor.X-$width*$script:drag.grabX;$top=$Cursor.Y-$height*.16
-  $left=[Math]::Max($Frame.Left,[Math]::Min($Frame.Right-$width,$left))
-  $top=[Math]::Max($Frame.Top,[Math]::Min($Frame.Bottom-$height,$top))
-  return @{Left=$left;Top=$top;Right=$left+$width;Bottom=$top+$height;Width=$width;Height=$height}
+  if($width-le $Frame.Right-$Frame.Left){$left=[Math]::Max($Frame.Left,[Math]::Min($Frame.Right-$width,$left))}
+  if($height-le $Frame.Bottom-$Frame.Top){$top=[Math]::Max($Frame.Top,[Math]::Min($Frame.Bottom-$height,$top))}
+  return @{Left=$left;Top=$top;Right=$left+$width;Bottom=$top+$height;Width=$width;Height=$height;PointerX=$Cursor.X;PointerY=$Cursor.Y}
 }
 function Resolve-LiveDockMode($Frame,$Bounds,[double]$Dpi,[string]$Current) {
-  $mode=Resolve-WidgetDockMode $Frame $Bounds $Dpi
-  if($mode-eq 'free'-and $Current-ne 'free'-and (Resolve-WidgetDockMode $Frame $Bounds $Dpi 40)-eq $Current){return $Current}
+  $probe=$Bounds.Clone()
+  # An oversized image cannot fit between both edges. Use the pointer on that axis.
+  if($Bounds.Width-gt $Frame.Right-$Frame.Left){$probe.Left=$probe.Right=[Math]::Max($Frame.Left,[Math]::Min($Frame.Right,$Bounds.PointerX))}
+  if($Bounds.Height-gt $Frame.Bottom-$Frame.Top){$probe.Top=$probe.Bottom=[Math]::Max($Frame.Top,[Math]::Min($Frame.Bottom,$Bounds.PointerY))}
+  $mode=Resolve-WidgetDockMode $Frame $probe $Dpi
+  if($mode-eq 'free'-and $Current-ne 'free'-and (Resolve-WidgetDockMode $Frame $probe $Dpi 40)-eq $Current){return $Current}
   return $mode
 }
 function Move-LiveWidget($Frame,[double]$Dpi,[double]$X,[double]$Y) {

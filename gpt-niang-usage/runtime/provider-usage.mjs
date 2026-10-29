@@ -15,6 +15,12 @@ export const providers=[
  {id:'custom',name:'自定义兼容接口',baseUrl:'',protocol:'OpenAI',keyEnv:''},
 ].map(p=>({...p,enabled:p.id==='ark',models:''}));
 const number=x=>Number.isFinite(Number(x))?Number(x):0;
+export function credentialValue(env,name){
+ if(!name)return undefined;
+ if(env[name]!==undefined)return env[name];
+ if(process.platform==='win32'){const actual=Object.keys(env).find(key=>key.toUpperCase()===name.toUpperCase());return actual===undefined?undefined:env[actual];}
+ return undefined;
+}
 async function* files(root){if(!fs.existsSync(root))return;for(const e of await fs.promises.readdir(root,{withFileTypes:true})){const p=path.join(root,e.name);if(e.isDirectory())yield* files(p);else if(e.name.endsWith('.jsonl'))yield p;}}
 export async function codexUsage(root=process.env.CODEX_HOME||path.join(os.homedir(),'.codex')){
  const sessions=new Map();let damaged=0,seen=0;
@@ -63,15 +69,15 @@ export async function accountUsage(p,{fetcher=fetch,env=process.env,now=Date.now
   };
   const valid=x=>typeof x==='number'&&Number.isFinite(x);
   const [credits,keyLimit]=await Promise.all([
-   read('credits',env[p.managementKeyEnv||'OPENROUTER_MANAGEMENT_KEY'],d=>{if(!valid(d?.total_credits)||!valid(d?.total_usage))throw Error();return {remaining:d.total_credits-d.total_usage};}),
-   read('key',env[p.keyEnv],d=>{if(!d||!Object.hasOwn(d,'limit')||(d.limit!==null&&!valid(d.limit))||(d.limit!==null&&!valid(d.limit_remaining)))throw Error();return {limit:d.limit,remaining:d.limit===null?null:d.limit_remaining,usage:valid(d.usage)?d.usage:null,reset:d.limit_reset??null};})
+   read('credits',credentialValue(env,p.managementKeyEnv||'OPENROUTER_MANAGEMENT_KEY'),d=>{if(!valid(d?.total_credits)||!valid(d?.total_usage))throw Error();return {remaining:d.total_credits-d.total_usage};}),
+   read('key',credentialValue(env,p.keyEnv),d=>{if(!d||!Object.hasOwn(d,'limit')||(d.limit!==null&&!valid(d.limit))||(d.limit!==null&&!valid(d.limit_remaining)))throw Error();return {limit:d.limit,remaining:d.limit===null?null:d.limit_remaining,usage:valid(d.usage)?d.usage:null,reset:d.limit_reset??null};})
   ]);
   return {...base,status:credits.status==='ok'&&keyLimit.status==='ok'?'ok':'partial',kind:'openrouter',credits,keyLimit,period:'查询时额度'};
  }
  if(['ark','gemini','custom'].includes(p.id))return {...base,status:'unsupported',note:p.id==='ark'?'Coding Plan 剩余比例见下方 Ark 卡片；不能换算成 token。':'未配置受支持的账户汇总接口；兼容推理 API 不代表支持账户用量查询。'};
  const spec=providers.find(x=>x.id===p.id);if(!spec)return {...base,status:'unsupported'};
  // Usage credentials never follow a user-edited inference URL or an HTTP redirect.
- const secret=env[p.keyEnv];if(!secret)return {...base,status:'unconfigured',note:`请设置环境变量 ${p.keyEnv||'（未填写）'} 后重启挂件。OpenAI / Anthropic 需要管理密钥。`};
+ const secret=credentialValue(env,p.keyEnv);if(!secret)return {...base,status:'unconfigured',note:'请在设置中保存查询密钥。OpenAI / Anthropic 需要管理查询权限。'};
  const start=new Date(now-7*86400000),end=new Date(now);let url,headers={Authorization:`Bearer ${secret}`};
  if(p.id==='openai'){url=new URL('https://api.openai.com/v1/organization/usage/completions');url.search=new URLSearchParams({start_time:String(Math.floor(+start/1000)),end_time:String(Math.floor(now/1000)),bucket_width:'1d',limit:'7'});}
  if(p.id==='anthropic'){url=new URL('https://api.anthropic.com/v1/organizations/usage_report/messages');url.search=new URLSearchParams({starting_at:start.toISOString(),ending_at:end.toISOString(),bucket_width:'1d',limit:'7'});headers={'x-api-key':secret,'anthropic-version':'2023-06-01'};}

@@ -69,6 +69,9 @@ function Initialize-WidgetMusicTypes {
   if('GptMusicVisual' -as [type]){return}
   Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase,System.Xaml,System.Windows.Forms,System.Drawing
   $references=@('System.dll','System.Core.dll','System.Xaml.dll','System.Windows.Forms.dll','System.Drawing.dll',[Windows.Window].Assembly.Location,[Windows.Media.Brush].Assembly.Location,[Windows.Point].Assembly.Location)
+  if($PSVersionTable.PSEdition-eq 'Core'){
+    $references=@((Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll'|ForEach-Object FullName)+@([Windows.Window].Assembly.Location,[Windows.Media.Brush].Assembly.Location,[Windows.Point].Assembly.Location,[Windows.Forms.Form].Assembly.Location,[System.Xaml.XamlReader].Assembly.Location))|Sort-Object -Unique
+  }
   Add-Type -Path @((Join-Path $script:appDir 'runtime/music-audio.cs'),(Join-Path $script:appDir 'runtime/music-visual.cs')) -ReferencedAssemblies $references
 }
 function Test-WidgetMusicActive {

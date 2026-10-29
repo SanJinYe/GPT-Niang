@@ -33,7 +33,7 @@ function packageFiles(version='1.3.3') {
   files['GPT娘额度挂件/.agents/plugins/marketplace.json']='{}';return files;
 }
 function release(bytes,version='1.3.3') {
-  const name=`gpt-niang-usage-widget-v${version}-windows.zip`,base=`https://github.com/T7moris/GPT-Niang/releases/download/v${version}/`;
+  const name=`gpt-niang-usage-widget-v${version}-windows.zip`,base=`https://github.com/SanJinYe/GPT-Niang/releases/download/v${version}/`;
   return {tag_name:'v'+version,assets:[{name,browser_download_url:base+name,size:bytes.length,digest:'sha256:'+createHash('sha256').update(bytes).digest('hex')},{name:'SHA256SUMS.txt',browser_download_url:base+'SHA256SUMS.txt'}]};
 }
 function temporary(t) {
@@ -57,7 +57,7 @@ test('stable versions compare numerically and ignore same versions, prereleases 
   assert.equal(selectRelease({...r,prerelease:true},'1.3.2'),null);assert.equal(selectRelease({...r,draft:true},'1.3.2'),null);
 });
 test('release URLs are fixed and arbitrary hosts or assets are rejected',()=>{
-  for(const url of ['http://github.com/test','https://example.com/file','https://user:pass@github.com/T7moris/GPT-Niang/releases/download/x/a','https://github.com/evil/repo/releases/download/x/a','https://api.github.com/repos/evil/repo/releases/latest'])assert.throws(()=>allowedUrl(url));
+  for(const url of ['http://github.com/test','https://example.com/file','https://user:pass@github.com/SanJinYe/GPT-Niang/releases/download/x/a','https://github.com/evil/repo/releases/download/x/a','https://api.github.com/repos/evil/repo/releases/latest'])assert.throws(()=>allowedUrl(url));
   allowedUrl(RELEASE_API,{api:true});allowedUrl('https://release-assets.githubusercontent.com/x?signature=value');
   const r=release(Buffer.alloc(0));r.assets[0].browser_download_url=r.assets[0].browser_download_url.replace('/v1.3.3/','/v9.0.0/');assert.throws(()=>selectRelease(r,'1.3.2'));
 });
@@ -214,7 +214,7 @@ function fakeRequest(status,headers={},chunks=['payload']) {
   };
 }
 test('HTTP limits, rate limits and unsafe redirects are enforced without credentials',async()=>{
-  const url='https://github.com/T7moris/GPT-Niang/releases/download/v1.3.3/file.zip';
+  const url='https://github.com/SanJinYe/GPT-Niang/releases/download/v1.3.3/file.zip';
   await assert.rejects(download(url,{request:fakeRequest(429,{'retry-after':'172800'})}),error=>error.retryAfterMs>=DAY*2);
   await assert.rejects(download(url,{request:fakeRequest(429,{'retry-after':'60'})}),error=>error.retryAfterMs===60000);
   await assert.rejects(download(url,{limit:3,request:fakeRequest(200,{},['too big'])}));
@@ -225,4 +225,15 @@ test('HTTP limits, rate limits and unsafe redirects are enforced without credent
 test('quota requests return retryable UPDATING without starting a worker',async t=>{
   const {config}=setup(t);fs.writeFileSync(path.join(config.dataDir,'update-installing.json'),JSON.stringify({pid:process.pid}));
   const snapshot=await requestRefresh(config,'unused',{startWorker:()=>assert.fail('Worker must not start')});assert.equal(snapshot.retryable,true);assert.equal(snapshot.errorCode,'UPDATING');
+});
+
+test('fork updater rejects upstream releases and handles no fork release without fallback',async t=>{
+ assert.equal(RELEASE_API,'https://api.github.com/repos/SanJinYe/GPT-Niang/releases/latest');
+ assert.throws(()=>allowedUrl('https://api.github.com/repos/T7moris/GPT-Niang/releases/latest',{api:true}));
+ assert.throws(()=>allowedUrl('https://github.com/T7moris/GPT-Niang/releases/download/v9.0.0/widget.zip'));
+ const {config,options}=setup(t);const requests=[];
+ options.fetchBytes=async url=>{requests.push(url);throw Object.assign(new Error('Not Found'),{status:404});};
+ await runUpdate(config,options);
+ assert.deepEqual(requests,[RELEASE_API]);assert.equal(options.installs,0);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(config.dataDir,'update-status.json'))).phase,'no-release');
 });

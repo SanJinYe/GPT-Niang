@@ -3,12 +3,12 @@ function Initialize-WidgetUpdater {
   $preferences=Read-WidgetUpdateJson (Join-Path $script:dataDir 'update-preferences.json')
   $script:autoUpdate=!($preferences -and $preferences.automatic-eq $false)
 }
-function Test-WidgetUpdateEditor {
-  return [bool]($script:audioDialogOpen -or ($script:settingsWindow -and $script:settingsWindow.IsVisible) -or ($script:quoteEditor -and $script:quoteEditor.IsVisible) -or ($script:colorTriggerEditor -and $script:colorTriggerEditor.IsVisible) -or ($script:characterGallery -and $script:characterGallery.IsVisible))
+function Test-WidgetUpdateEditor([switch]$AllowSettingsWindow) {
+  return [bool]($script:audioDialogOpen -or (!$AllowSettingsWindow -and $script:settingsWindow -and $script:settingsWindow.IsVisible) -or ($script:quoteEditor -and $script:quoteEditor.IsVisible) -or ($script:colorTriggerEditor -and $script:colorTriggerEditor.IsVisible) -or ($script:characterGallery -and $script:characterGallery.IsVisible))
 }
 function Start-WidgetUpdate([string]$Mode='manual') {
   if($script:updateProcess){if(!$script:updateProcess.HasExited){return};$script:updateProcess.Dispose();$script:updateProcess=$null}
-  if($Mode-eq 'manual' -and (Test-WidgetUpdateEditor)){
+  if($Mode-eq 'manual' -and (Test-WidgetUpdateEditor -AllowSettingsWindow)){
     [Windows.MessageBox]::Show($script:window,'请先保存并关闭编辑窗口，再检查更新。','GPT 娘更新')|Out-Null;return
   }
   if(!$script:config.nodePath){return}
@@ -42,6 +42,7 @@ function Update-WidgetUpdateMenu {
     'source' {'源码目录请使用 Git 更新'}
     'rate-limited' {'GitHub 限流，稍后再检查'}
     'current' {'已是最新正式版'}
+    'no-release' {'定制仓库暂无正式版'}
     'cancelled' {'自动更新已关闭'}
     default {'自动检查正式版，每 24 小时一次'}
   }
@@ -61,5 +62,5 @@ function Tick-WidgetUpdater([long]$Now) {
     $script:updateCleanupChecked=$true;Start-WidgetUpdate 'cleanup'
   }
   if($script:autoUpdate -and $Now-ge $script:updateStartedAt+30000 -and $Now-ge [long]$state.nextCheckAt -and $state.phase-ne 'source'){Start-WidgetUpdate 'automatic'}
-  if($script:context.IsOpen){Update-WidgetUpdateMenu}
+  if($script:context.IsOpen-or ($script:settingsWindow-and $script:settingsWindow.IsVisible)){Update-WidgetUpdateMenu}
 }

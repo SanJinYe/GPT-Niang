@@ -6,6 +6,12 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {accountUsage,codexUsage,opencodeUsage,providers} from '../runtime/provider-usage.mjs';
+test('Windows environment credentials retain case-insensitive lookup',{skip:process.platform!=='win32'},async()=>{
+ const result=await accountUsage({id:'openrouter',name:'OpenRouter',keyEnv:'REVIEW_KEY',managementKeyEnv:'REVIEW_ADMIN'},{env:{Review_Key:'fixture',review_admin:'admin-fixture'},fetcher:async(url,options)=>{
+  const credit=String(url).endsWith('/credits');assert.equal(options.headers.Authorization,'Bearer '+(credit?'admin-fixture':'fixture'));
+  return {ok:true,json:async()=>({data:credit?{total_credits:10,total_usage:2}:{limit:5,limit_remaining:3}})};
+ }});assert.equal(result.status,'ok');assert.equal(result.keyLimit.remaining,3);
+});
 test('Codex cumulative snapshots and archive copies count once',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'niang-usage-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,'sessions'));fs.mkdirSync(path.join(root,'archived_sessions'));
  const rows=[{type:'session_meta',payload:{id:'same'}},...[10,20,20].map(n=>({type:'event_msg',payload:{type:'token_count',info:{total_token_usage:{input_tokens:n-2,output_tokens:2,cached_input_tokens:3,total_tokens:n}}}}))].map(JSON.stringify).join('\n');

@@ -152,7 +152,14 @@ function Convert-SettingsSection($Section,[bool]$Top=$false) {
       $expand=[Windows.Controls.Expander]::new();$expand.Header=[string]$item.Header;$expand.Content=$sub;$expand.Margin=[Windows.Thickness]::new(0,6,0,6)
       $panel.Children.Add($expand)|Out-Null;continue
     }
-    if(!$item.IsHitTestVisible){continue}
+    if(!$item.IsHitTestVisible){
+      if([Object]::ReferenceEquals($item,$script:settingsMenuUi.UpdateStatus)){
+        $status=[Windows.Controls.TextBlock]::new();$status.TextWrapping='Wrap';$status.Margin=[Windows.Thickness]::new(0,8,0,0)
+        $binding=[Windows.Data.Binding]::new('Header.Text');$binding.Source=$item;$status.SetBinding([Windows.Controls.TextBlock]::TextProperty,$binding)|Out-Null
+        $panel.Children.Add($status)|Out-Null
+      }
+      continue
+    }
     $header=$item.Header
     $description=$header-is [Windows.Controls.StackPanel] -and $header.Children.Count-eq 2 -and $header.Children[0]-is [Windows.Controls.TextBlock] -and $header.Children[1]-is [Windows.Controls.TextBlock]
     if($header-is [Windows.UIElement] -and !$description){
@@ -166,6 +173,8 @@ function Convert-SettingsSection($Section,[bool]$Top=$false) {
       $control=[Windows.Controls.Button]::new();$control.Content=$label;$control.HorizontalAlignment='Left';$control.Tag=$item
       $control.Add_Click({param($sender,$event)$sender.Tag.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.MenuItem]::ClickEvent));Update-WidgetSettingsMenu})
     }
+    $binding=[Windows.Data.Binding]::new($(if($description){'Header.Children[0].Text'}else{'Header'}));$binding.Source=$item
+    $control.SetBinding([Windows.Controls.ContentControl]::ContentProperty,$binding)|Out-Null
     $control.IsEnabled=$item.IsEnabled;$script:settingsControls+=,$control;$panel.Children.Add($control)|Out-Null
   }
   return ,$panel

@@ -8,8 +8,8 @@ import {fileURLToPath} from 'node:url';
 import {atomicJson} from './usage.mjs';
 
 export const DAY = 86400000;
-export const RELEASE_API = 'https://api.github.com/repos/T7moris/GPT-Niang/releases/latest';
-const RELEASE_PATH = '/T7moris/GPT-Niang/releases/download/';
+export const RELEASE_API = 'https://api.github.com/repos/SanJinYe/GPT-Niang/releases/latest';
+const RELEASE_PATH = '/SanJinYe/GPT-Niang/releases/download/';
 const MAX_ZIP = 50 * 1024 * 1024, MAX_EXPANDED = 100 * 1024 * 1024;
 const read = file => {try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return null;}};
 const readTransaction = file => {
@@ -71,6 +71,7 @@ export async function download(url,{limit=MAX_ZIP,api=false,request=https.get,on
       if(status!==200) {
         response.resume();
         const error=new Error('GitHub update request failed ('+status+')');
+        error.status=status;
         if(status===429 || (status===403 && response.headers['x-ratelimit-remaining']==='0')) {
           const retry=response.headers['retry-after'];
           const seconds=/^\d+$/.test(retry??'')?Number(retry)*1000:Date.parse(retry)-Date.now();
@@ -298,7 +299,9 @@ async function performUpdate(config,{mode='manual',agentDir=path.join(process.en
     }
     if(mode==='cleanup')return;
     report({phase:'checking',message:'正在检查正式版…',nextCheckAt:Date.now()+DAY,retryAfterAt:0});
-    const release=JSON.parse((await fetchBytes(RELEASE_API,{api:true,limit:1024*1024})).toString('utf8'));
+    let release;
+    try{release=JSON.parse((await fetchBytes(RELEASE_API,{api:true,limit:1024*1024})).toString('utf8'));}
+    catch(error){if(error.status===404){report({phase:'no-release',message:'定制仓库暂无正式发布版本。'});return;}throw error;}
     const selected=selectRelease(release,config.version);
     if(!selected){report({phase:'current',message:'已是最新正式版。'});return;}
     report({phase:'downloading',version:selected.version,message:'正在下载更新…',bytes:0});
