@@ -12,10 +12,11 @@ public static class GptWidgetNative {
  public static bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int height,uint flags){X=x;Y=y;if(OnMove!=null)OnMove();return true;}
 }
 '@
-$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $script:appDir 'widget.ps1'),[ref]$tokens,[ref]$errors)
+$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path $script:appDir 'widget.ps1'),[Text.Encoding]::UTF8),[ref]$tokens,[ref]$errors)
+if($errors.Count){throw ($errors.Message -join '; ')}
 foreach($name in @('Set-Facing','Get-WidgetLayoutScale','Set-WidgetIndependentLayout','Test-WidgetPlacementFrame')){$def=$ast.Find({param($n)$n-is [Management.Automation.Language.FunctionDefinitionAst]-and $n.Name-eq $name},$true);. ([scriptblock]::Create($def.Extent.Text))}
 function Get-WidgetPlacementFrame {return @{Left=100;Top=100;Right=1100;Bottom=900}}
-function Get-WidgetPlacementDpi {return 1.0}
+function Get-WidgetPlacementDpi {return $(if($script:testDpi){$script:testDpi}else{1.0})}
 function Get-LiveDockClock {return $script:testClock}
 function Set-WidgetPixelSize($Dpi) {}
 function Sync-WidgetCharacterColors {}
@@ -101,24 +102,62 @@ try{
   $before=$script:clicks;$source=$script:ui.Girl.Source;$mode=$script:dockMode
   Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450});$candidate=$script:drag
   if(!$script:pressFeedback){throw 'Click candidate lost press squash feedback'}
+  if($candidate.activateAt-ne $script:testClock+500-or $candidate.holdTimer.Interval.TotalMilliseconds-ne 500){throw 'Pickup hold delay must be 500 ms'}
   if(!$candidate.pendingClick-or $script:pickupState-or !$script:musicTest){throw 'Click candidate changed artwork or stopped music'}
   Update-WidgetPointerGesture ([pscustomobject]@{X=602;Y=451})
   $script:testClock+=80;Complete-WidgetPointerGesture ([pscustomobject]@{X=602;Y=451})
   if($script:clicks-ne $before+1-or $script:drag-or $script:ui.Girl.Source-ne $source-or $script:dockMode-ne $mode-or $candidate.holdTimer.IsEnabled){throw 'Short click failed exclusivity or cleanup'}
   if($script:pressFeedback){throw 'Release did not trigger rebound'}
  }
+ foreach($script:testDpi in @(1.0,1.5,2.0)){
+  foreach($preview in @($false,$true)){
+   $before=$script:clicks
+   Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450})
+   if($preview){Activate-WidgetPointerDrag ([pscustomobject]@{X=600;Y=450}) -PreviewOnly}
+   $jitter=[pscustomobject]@{X=600+18*$script:testDpi;Y=450+4*$script:testDpi}
+   if($preview){Update-LiveDockDrag $jitter;Complete-LiveDockDrag -Cursor $jitter}
+   else{Update-WidgetPointerGesture $jitter;Complete-WidgetPointerGesture $jitter}
+   if($script:clicks-ne $before+1-or $script:drag){throw 'Touchpad press jitter lost its click'}
+   Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450})
+   if($preview){Activate-WidgetPointerDrag ([pscustomobject]@{X=600;Y=450}) -PreviewOnly}
+   $travel=[pscustomobject]@{X=600+20*$script:testDpi;Y=450}
+   if($preview){Update-LiveDockDrag $travel}else{Update-WidgetPointerGesture $travel}
+   if(!$script:drag.liveDock-or !$script:drag.moved){throw 'Intentional drag acquired a timing delay'}
+   Complete-LiveDockDrag
+   if($script:clicks-ne $before+1){throw 'Intentional drag also clicked'}
+  }
+ }
+ $script:testDpi=1.0
  $before=$script:clicks
  Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450})
- Update-WidgetPointerGesture ([pscustomobject]@{X=608;Y=450})
+ Update-WidgetPointerGesture ([pscustomobject]@{X=620;Y=450})
  if(!$script:drag.liveDock-or !$script:pickupState){throw 'Movement threshold failed to activate pickup'}
  if($script:pressFeedback){throw 'Pickup inherited click squash'}
  Complete-LiveDockDrag
  if($script:clicks-ne $before){throw 'Dragging also advanced the bubble'}
- Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450});$script:testClock+=200
- $pump=[Windows.Threading.DispatcherFrame]::new();$wake=[Windows.Threading.DispatcherTimer]::new();$wake.Interval=[TimeSpan]::FromMilliseconds(240);$wake.Add_Tick({$wake.Stop();$pump.Continue=$false});$wake.Start();[Windows.Threading.Dispatcher]::PushFrame($pump)
- if(!$script:pickupState-or !$script:drag.gestureDrag){throw 'Long press failed to activate pickup'}
+ Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450});$script:testClock+=500
+ $pump=[Windows.Threading.DispatcherFrame]::new();$wake=[Windows.Threading.DispatcherTimer]::new();$wake.Interval=[TimeSpan]::FromMilliseconds(540);$wake.Add_Tick({$wake.Stop();$pump.Continue=$false});$wake.Start();[Windows.Threading.Dispatcher]::PushFrame($pump)
+ if(!$script:pickupState-or $script:drag.gestureDrag){throw 'Long press should preview pickup without committing drag'}
  Complete-LiveDockDrag
- if($script:clicks-ne $before){throw 'Long press release advanced the bubble'}
+ if($script:clicks-ne $before+1){throw 'Stationary long press lost its click'}
+ $before=$script:clicks
+ foreach($delay in @(0,199,200,350,499,500,800)){
+  Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450})
+  $script:testClock+=$delay
+  Complete-WidgetPointerGesture ([pscustomobject]@{X=602;Y=451})
+  $before++
+  if($script:clicks-ne $before-or $script:drag){throw "Delayed release ($delay ms) lost or duplicated click"}
+ }
+ Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450})
+ Activate-WidgetPointerDrag ([pscustomobject]@{X=600;Y=450}) -PreviewOnly
+ Update-LiveDockDrag ([pscustomobject]@{X=603;Y=451})
+ if($script:drag.moved){throw 'Hold preview committed drag on sub-threshold jitter'}
+ Complete-LiveDockDrag -Cursor ([pscustomobject]@{X=620;Y=450})
+ if($script:clicks-ne $before){throw 'Release-only movement incorrectly clicked'}
+ Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450})
+ Activate-WidgetPointerDrag ([pscustomobject]@{X=600;Y=450}) -PreviewOnly
+ Complete-LiveDockDrag -Cancel
+ if($script:clicks-ne $before-or $script:drag){throw 'Cancelled hold preview clicked'}
  Start-WidgetPointerGesture $sender ([pscustomobject]@{X=600;Y=450});$candidate=$script:drag;Complete-WidgetPointerGesture -Cancel
  if($script:clicks-ne $before-or $script:drag-or $candidate.holdTimer.IsEnabled){throw 'Cancelled click candidate leaked an action'}
  $script:musicTest=$false;$script:testClock=9000

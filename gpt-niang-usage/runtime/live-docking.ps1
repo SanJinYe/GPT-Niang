@@ -2,38 +2,42 @@ $script:liveDockingEnabled=$true
 function Get-LiveDockClock {return [Diagnostics.Stopwatch]::GetTimestamp()*1000.0/[Diagnostics.Stopwatch]::Frequency}
 function Start-WidgetPointerGesture($Control,$Cursor) {
   if($script:drag){return}
-  $state=@{pendingClick=$true;control=$Control;x=$Cursor.X;y=$Cursor.Y;lastCursor=$Cursor;activateAt=(Get-LiveDockClock)+200;threshold=6*(Get-WidgetPlacementDpi)}
+  $state=@{pendingClick=$true;control=$Control;x=$Cursor.X;y=$Cursor.Y;lastCursor=$Cursor;activateAt=(Get-LiveDockClock)+500;threshold=20*(Get-WidgetPlacementDpi)}
   $script:drag=$state
   if(!$Control.CaptureMouse()){$script:drag=$null;return}
   Animate-Press $true
   Play-WidgetPressSound
-  $timer=[Windows.Threading.DispatcherTimer]::new();$timer.Tag=$state;$timer.Interval=[TimeSpan]::FromMilliseconds(200)
+  $timer=[Windows.Threading.DispatcherTimer]::new();$timer.Tag=$state;$timer.Interval=[TimeSpan]::FromMilliseconds(500)
   $timer.Add_Tick({param($sender,$event)
     $sender.Stop()
     if(!$script:runtimeClosed-and [Object]::ReferenceEquals($script:drag,$sender.Tag)){
       $remaining=$script:drag.activateAt-(Get-LiveDockClock)
       if($remaining-gt 0){$sender.Interval=[TimeSpan]::FromMilliseconds([Math]::Max(1,$remaining));$sender.Start();return}
-      Activate-WidgetPointerDrag $script:drag.lastCursor
+      Activate-WidgetPointerDrag $script:drag.lastCursor -PreviewOnly
     }
     $sender.Tag=$null
   })
   $state.holdTimer=$timer;$timer.Start()
 }
-function Activate-WidgetPointerDrag($Cursor) {
+function Activate-WidgetPointerDrag($Cursor,[switch]$PreviewOnly) {
   if(!$script:drag-or !$script:drag.pendingClick){return}
   $pending=$script:drag
   if($pending.holdTimer){$pending.holdTimer.Stop();$pending.holdTimer.Tag=$null}
   Animate-Press $false
   $script:drag=$null
   Start-LiveDockDrag $pending.control $Cursor -SilentPress
-  # Once drag is committed, its release must never advance the bubble.
-  $script:drag.gestureDrag=$true;$script:drag.moved=$true;Hide-Quota
+  # Holding previews pickup; only pointer travel commits a drag. Both mouse
+  # and touchpad drivers use this path, regardless of button-event timing.
+  $script:drag.x=$pending.x;$script:drag.y=$pending.y
+  $script:drag.gestureThreshold=$pending.threshold
+  $script:drag.gestureDrag=!$PreviewOnly;$script:drag.moved=!$PreviewOnly
+  if(!$PreviewOnly){Hide-Quota}
 }
 function Update-WidgetPointerGesture($Cursor) {
   if(!$script:drag-or !$script:drag.pendingClick){return}
   $script:drag.lastCursor=$Cursor
   $dx=$Cursor.X-$script:drag.x;$dy=$Cursor.Y-$script:drag.y
-  if($dx*$dx+$dy*$dy-ge $script:drag.threshold*$script:drag.threshold-or (Get-LiveDockClock)-ge $script:drag.activateAt){Activate-WidgetPointerDrag $Cursor}
+  if($dx*$dx+$dy*$dy-ge $script:drag.threshold*$script:drag.threshold){Activate-WidgetPointerDrag $Cursor}
 }
 function Complete-WidgetPointerGesture($Cursor,[switch]$Cancel) {
   if(!$script:drag-or !$script:drag.pendingClick){return}
@@ -119,7 +123,8 @@ function Update-LiveDockDrag($Cursor,[switch]$Recheck) {
   $active.lastX=$Cursor.X;$active.lastY=$Cursor.Y
   $script:drag.lastCursor=$Cursor
   $distance=($Cursor.X-$script:drag.x)*($Cursor.X-$script:drag.x)+($Cursor.Y-$script:drag.y)*($Cursor.Y-$script:drag.y)
-  if(!$script:drag.moved-and $distance-lt 9){return}
+  $thresholdSquared=if($script:drag.gestureThreshold){$script:drag.gestureThreshold*$script:drag.gestureThreshold}else{9}
+  if(!$script:drag.moved-and $distance-lt $thresholdSquared){return}
   if(!$script:drag.moved){$script:drag.moved=$true;Hide-Quota}
   $frame=Get-WidgetPlacementFrame;$dpi=Get-WidgetPlacementDpi
   if(!(Test-WidgetPlacementFrame $frame $dpi)){return}
@@ -148,7 +153,7 @@ function Complete-LiveDockDrag([switch]$Cancel,$Cursor) {
   if(!$script:drag-or !$script:drag.liveDock){return}
   $state=$script:drag
   if($state.dockGraceTimer){$state.dockGraceTimer.Stop();$state.dockGraceTimer.Tag=$null}
-  if(!$Cancel-and ($state.moved-or $state.gestureDrag)){
+  if(!$Cancel-and ($state.moved-or $state.gestureDrag-or $state.gestureThreshold)){
     # Mouse-up ends grace immediately, even if 500 ms have not elapsed.
     $state.dockAllowedAt=0
     if(!$Cursor){$Cursor=$state.lastCursor}
