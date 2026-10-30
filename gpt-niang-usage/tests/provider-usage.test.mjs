@@ -61,3 +61,24 @@ test('real worker receives saved credentials through stdin without persisting th
  assert.equal(result.requestId,'pipe-test');assert.equal(result.accounts[0].keyLimit.status,'ok');assert.equal(result.accounts[0].keyLimit.remaining,12);
  assert.equal((text+output+errors).includes('fixture-only-secret'),false);
 });
+
+ test('account pagination shares a deadline and does not expose partial totals',async()=>{
+  let count=0;
+  const result=await accountUsage(providers[0],{timeoutMs:80,env:{OPENAI_ADMIN_KEY:'fixture'},fetcher:async(url,{signal})=>{
+   count++;
+   if(count===1){await new Promise(resolve=>setTimeout(resolve,45));return {ok:true,json:async()=>({data:[{results:[{input_tokens:10}]}],next_page:'next'})};}
+   return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>resolve({ok:true,json:async()=>({data:[]})}),60);
+    signal.addEventListener('abort',()=>{clearTimeout(timer);reject(signal.reason);},{once:true});
+    if(signal.aborted){clearTimeout(timer);reject(signal.reason);}
+   });
+  }});
+  assert.equal(result.status,'error');assert.equal(result.input,undefined);
+ });
+ test('OpenRouter timeout keeps successful key result separate from failed credits',async()=>{
+  const result=await accountUsage(providers.find(p=>p.id==='openrouter'),{timeoutMs:30,env:{OPENROUTER_API_KEY:'fixture',OPENROUTER_MANAGEMENT_KEY:'fixture'},fetcher:async(url,{signal})=>{
+   if(String(url).endsWith('/key'))return {ok:true,json:async()=>({data:{limit:10,limit_remaining:8,usage:2}})};
+   return new Promise((resolve,reject)=>{const timer=setTimeout(resolve,1000);signal.addEventListener('abort',()=>{clearTimeout(timer);reject(signal.reason);},{once:true});});
+  }});
+  assert.equal(result.status,'partial');assert.equal(result.keyLimit.status,'ok');assert.equal(result.credits.status,'error');
+ });

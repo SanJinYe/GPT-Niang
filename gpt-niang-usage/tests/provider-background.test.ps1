@@ -13,7 +13,7 @@ try{
  if(!$script:usageProcess){throw 'Query must start without a settings window'}
  if(!$script:usageProcess.WaitForExit(15000)){throw 'Query timed out'}
  Sync-ProviderUsage
- if($script:usageQueryFailed-or !$script:usageResult.at-or $script:usageProcess){throw 'Background query result not consumed'}
+ if($script:usageQueryFailed-or !$script:usageResult.at-or $script:usageProcess){throw ('Background query result not consumed: '+$script:usageErr.Result)}
  if($script:ttlResets-ne 1){throw 'Completed query must restart bubble expiry'}
  'PASS: query starts, completes and updates expiry without the settings window'
 }finally{

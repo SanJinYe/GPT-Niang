@@ -57,12 +57,14 @@ export async function opencodeUsage(dbPath=process.env.OPENCODE_DB||path.join(os
   return {source:'本机 OpenCode 数据库',status:'unsupported',note:'数据库版本未支持，未将缺失数据当作零。'};
  }catch{return {source:'本机 OpenCode 数据库',status:'error',note:'数据库读取失败，请检查路径、版本或文件占用。'};}finally{db?.close();}
 }
-export async function accountUsage(p,{fetcher=fetch,env=process.env,now=Date.now()}={}){
+export async function accountUsage(p,{fetcher=fetch,env=process.env,now=Date.now(),timeoutMs=30000}={}){
+ const deadline=Date.now()+timeoutMs;
+ const requestSignal=()=>{const remaining=deadline-Date.now();if(remaining<=0)throw Error('Account query timed out');return AbortSignal.timeout(Math.min(15000,Math.ceil(remaining)));};
  const base={source:`${p.name} 厂商账户接口`,provider:p.id};
  if(p.id==='openrouter'){
   const read=async(endpoint,key,parse)=>{
    if(!key)return {status:'unconfigured'};
-   try{const response=await fetcher(`https://openrouter.ai/api/v1/${endpoint}`,{headers:{Authorization:`Bearer ${key}`},redirect:'error',signal:AbortSignal.timeout(15000)});
+   try{const response=await fetcher(`https://openrouter.ai/api/v1/${endpoint}`,{headers:{Authorization:`Bearer ${key}`},redirect:'error',signal:requestSignal()});
     if(!response.ok)return {status:'error',http:response.status};
     return {status:'ok',...parse((await response.json()).data)};
    }catch{return {status:'error'};}
@@ -86,7 +88,7 @@ export async function accountUsage(p,{fetcher=fetch,env=process.env,now=Date.now
  try{
   const totals={input:0,output:0,cached:0,cacheWrite:0};const pages=new Set();
   for(let page=0;page<100;page++){
-   const response=await fetcher(url,{headers,redirect:'error',signal:AbortSignal.timeout(15000)});
+   const response=await fetcher(url,{headers,redirect:'error',signal:requestSignal()});
    if(!response.ok)return {...base,status:'error',note:`账户接口 HTTP ${response.status}；请检查管理密钥、权限和服务状态。`};
    const data=await response.json();
    if(p.id==='deepseek'){if(!Array.isArray(data.balance_infos))throw Error();return {...base,status:'ok',kind:'balance',balances:data.balance_infos.map(x=>({currency:x.currency,remaining:x.total_balance})),period:'查询时余额',note:'余额不是 token 用量。'};}
@@ -109,7 +111,8 @@ export async function run(stateDir,request=null){
  }))]);
  const result={requestId:request?.requestId??null,at:new Date().toISOString(),local:[codex,opencode],accounts};const file=path.join(stateDir,'provider-usage.json');fs.writeFileSync(file+'.tmp',JSON.stringify(result));fs.renameSync(file+'.tmp',file);return result;
 }
-async function readRequest(){process.stdin.setEncoding('utf8');let input='';for await(const chunk of process.stdin){input+=chunk;if(Buffer.byteLength(input)>262144)throw Error('Request too large');}const request=JSON.parse(input);if(!Array.isArray(request.providers)||!request.requestId)throw Error('Invalid request');return request;}
+// Windows PowerShell 5.1 may append a UTF-8 BOM when closing redirected stdin.
+async function readRequest(){process.stdin.setEncoding('utf8');let input='';for await(const chunk of process.stdin){input+=chunk;if(Buffer.byteLength(input)>262144)throw Error('Request too large');}const request=JSON.parse(input.trim());if(!Array.isArray(request.providers)||!request.requestId)throw Error('Invalid request');return request;}
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  (async()=>run(process.argv[2],process.argv.includes('--credentials-stdin')?await readRequest():null))().catch(()=>{process.stderr.write('Usage query failed\n');process.exitCode=1;});
 }

@@ -4,6 +4,7 @@ $script:arkNextRead=0L
 $script:arkReadStarted=0L
 $script:arkReadTask=$null
 $script:arkErrorTask=$null
+$script:arkPendingSince=$null
 function Convert-ArkQuota($Snapshot) {
   if($Snapshot.status-ne 'ok'){throw ('Ark '+$Snapshot.status)}
   $observed=[DateTimeOffset]::Parse([string]$Snapshot.observed_at).ToUnixTimeMilliseconds()
@@ -28,11 +29,18 @@ function Stop-ArkQuotaRead {
 }
 function Set-ArkQuotaSnapshot($Snapshot,[long]$Now) {
   if($Snapshot.status-eq 'refresh_in_progress'){
+    if($null-eq $script:arkPendingSince){$script:arkPendingSince=$Now}
+    if($Now-$script:arkPendingSince-ge 60000){
+      $script:arkStatus=@{queryOk=$false;error='Ark 刷新等待超时，请检查额度查询器的刷新锁';pending=$false}
+      $script:arkNextRead=$Now+60000
+      return
+    }
     if(!$script:arkStatus -or !$script:arkStatus.queryOk){$script:arkStatus=@{queryOk=$false;error=$null;pending=$true}}
     else{$script:arkStatus.pending=$true}
     $script:arkNextRead=$Now+5000
     return
   }
+  $script:arkPendingSince=$null
   $script:arkStatus=Convert-ArkQuota $Snapshot
   $script:arkNextRead=$Now+60000
 }

@@ -1,0 +1,67 @@
+--- a/ark_usage.py
++++ b/ark_usage.py
+@@ -116 +116,4 @@
+-    """Bounded OS file lease. A crashed owner is reported, never silently retried."""
++    """OS-owned lease: process termination releases it without Python cleanup.
++
++    Keep the file in place: unlinking a locked file could create two lock inodes.
++    """
+@@ -119,7 +122,26 @@
+-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+-    try:
+-        with os.fdopen(fd, 'w', encoding='utf-8') as out:
+-            json.dump({'pid': os.getpid(), 'created_at': time.time()}, out)
+-        yield
+-    finally:
+-        path.unlink(missing_ok=True)
++    with open(path, 'a+b') as handle:
++        handle.seek(0, os.SEEK_END)
++        if handle.tell() == 0:
++            handle.write(b' ')
++            handle.flush()
++        handle.seek(0)
++        try:
++            if os.name == 'nt':
++                import msvcrt
++                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
++            else:
++                import fcntl
++                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
++        except OSError as error:
++            import errno
++            if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
++                raise
++            raise FileExistsError('Quota refresh lease is busy') from error
++        try:
++            yield
++        finally:
++            handle.seek(0)
++            if os.name == 'nt':
++                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
++            else:
++                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+--- a/tests/test_ark_usage.py
++++ b/tests/test_ark_usage.py
+@@ -28,0 +29,22 @@
++
++    def test_refresh_lease_releases_after_owner_is_killed(self):
++        import subprocess
++        with q.refresh_lock(self.home):
++            with self.assertRaises(FileExistsError):
++                with q.refresh_lock(self.home):
++                    pass
++        code = ("import sys,time;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import ark_usage as q\n"
++                "with q.refresh_lock(Path(sys.argv[2])):\n print('locked',flush=True)\n time.sleep(60)")
++        child = subprocess.Popen([sys.executable, '-c', code, str(Path(q.__file__).parent), str(self.home)],
++                                 stdout=subprocess.PIPE, text=True)
++        try:
++            self.assertEqual(child.stdout.readline().strip(), 'locked')
++            child.kill()
++            child.wait(timeout=5)
++            with q.refresh_lock(self.home):
++                pass
++        finally:
++            if child.poll() is None:
++                child.kill()
++                child.wait(timeout=5)
++            child.stdout.close()
